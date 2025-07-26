@@ -7,7 +7,6 @@ import { Observable, from } from 'rxjs';
 import { CreateTodoDto } from './dto/create-todo.dto';
 import { UpdateTodoDto } from './dto/update-todo.dto';
 
-
 @Injectable()
 export class TodoService {
   constructor(
@@ -55,7 +54,9 @@ export class TodoService {
     if (!user) throw new NotFoundException(`User with id ${userId} not found`);
     const newTodo = this.todoRepo.create({
       ...createTodoDto,
-      dueDate: createTodoDto.dueDate ? new Date(createTodoDto.dueDate) : undefined,
+      dueDate: createTodoDto.dueDate ? new Date(createTodoDto.dueDate) : null,
+      priority: createTodoDto.priority ?? 'medium',
+      category: createTodoDto.category ?? null,
       user,
     });
     return this.todoRepo.save(newTodo);
@@ -67,7 +68,10 @@ export class TodoService {
     if (!todo) throw new NotFoundException(`Todo with id ${id} not found`);
     if (updateDto.title !== undefined) todo.title = updateDto.title;
     if (updateDto.completed !== undefined) todo.completed = updateDto.completed;
-    if (updateDto.dueDate !== undefined) todo.dueDate = updateDto.dueDate ? new Date(updateDto.dueDate) : null;
+    if (updateDto.dueDate !== undefined)
+      todo.dueDate = updateDto.dueDate ? new Date(updateDto.dueDate) : null;
+    if (updateDto.priority !== undefined) todo.priority = updateDto.priority;
+    if (updateDto.category !== undefined) todo.category = updateDto.category;
     return this.todoRepo.save(todo);
   }
 

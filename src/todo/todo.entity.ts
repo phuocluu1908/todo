@@ -1,4 +1,12 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn, UpdateDateColumn, DeleteDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  CreateDateColumn,
+  UpdateDateColumn,
+  DeleteDateColumn,
+} from 'typeorm';
 import { User } from '../user/user.entity';
 
 @Entity()
@@ -15,7 +23,13 @@ export class Todo {
   @Column({ type: 'datetime', nullable: true })
   dueDate: Date | null;
 
-  @ManyToOne(() => User, user => user.todos, { eager: true })
+  @Column({ type: 'varchar', default: 'medium' })
+  priority: 'low' | 'medium' | 'high';
+
+  @Column({ type: 'varchar', nullable: true })
+  category: string | null;
+
+  @ManyToOne(() => User, (user) => user.todos, { eager: true })
   user: User;
 
   @CreateDateColumn()

@@ -1,5 +1,5 @@
 import { ApiProperty } from '@nestjs/swagger';
-import { IsNotEmpty, IsString, IsOptional, IsDateString } from 'class-validator';
+import { IsNotEmpty, IsString, IsOptional, IsDateString, IsIn } from 'class-validator';
 
 
 export class CreateTodoDto {
@@ -12,4 +12,14 @@ export class CreateTodoDto {
   @IsOptional()
   @IsDateString()
   dueDate?: string;
+
+  @ApiProperty({ example: 'medium', description: 'Priority of the todo', required: false, enum: ['low', 'medium', 'high'] })
+  @IsOptional()
+  @IsIn(['low', 'medium', 'high'])
+  priority?: 'low' | 'medium' | 'high';
+
+  @ApiProperty({ example: 'work', description: 'Category of the todo', required: false })
+  @IsOptional()
+  @IsString()
+  category?: string;
 }
