@@ -18,6 +18,7 @@ import { DeleteResult } from 'typeorm';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { UpdateTodoDto } from './dto/update-todo.dto';
 
 @UseGuards(AuthGuard('jwt'))
 @Controller('todos')
@@ -54,16 +55,17 @@ export class TodoController {
     description: 'The todo has been successfully created.',
   })
   @UsePipes(new ValidationPipe({ whitelist: true }))
-  createTodo(@Body() createTodoDto: CreateTodoDto, @Request() req) {
+  async createTodo(@Body() createTodoDto: CreateTodoDto, @Request() req) {
     return this.todoService.createTodo(createTodoDto, req.user.userId);
   }
 
   @Patch(':id')
-  updateTodo(
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  async updateTodo(
     @Param('id') id: number,
-    @Body('completed') completed: boolean,
-  ): Observable<any> {
-    return this.todoService.updateTodo(Number(id), completed);
+    @Body() updateDto: UpdateTodoDto,
+  ) {
+    return this.todoService.updateTodo(Number(id), updateDto);
   }
 
   @Delete(':id')
