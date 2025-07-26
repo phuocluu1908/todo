@@ -6,12 +6,14 @@ import { User } from '../user/user.entity';
 import { Observable, from } from 'rxjs';
 import { CreateTodoDto } from './dto/create-todo.dto';
 import { UpdateTodoDto } from './dto/update-todo.dto';
+import { ActivityLog } from './activity-log.entity';
 
 @Injectable()
 export class TodoService {
   constructor(
     @InjectRepository(Todo) private readonly todoRepo: Repository<Todo>,
     @InjectRepository(User) private readonly userRepo: Repository<User>,
+    @InjectRepository(ActivityLog) private readonly logRepo: Repository<ActivityLog>,
   ) {}
 
   // Get all todos
@@ -75,6 +77,7 @@ export class TodoService {
       category: createTodoDto.category ?? null,
       user,
     });
+    await this.logActivity(user, newTodo, 'created');
     return this.todoRepo.save(newTodo);
   }
 
@@ -88,6 +91,7 @@ export class TodoService {
       todo.dueDate = updateDto.dueDate ? new Date(updateDto.dueDate) : null;
     if (updateDto.priority !== undefined) todo.priority = updateDto.priority;
     if (updateDto.category !== undefined) todo.category = updateDto.category;
+    await this.logActivity(todo.user, todo, 'updated');
     return this.todoRepo.save(todo);
   }
 
@@ -122,5 +126,18 @@ export class TodoService {
   // Restore a soft-deleted todo
   restoreTodo(id: number): Observable<any> {
     return from(this.todoRepo.restore(id));
+  }
+
+  private async logActivity(user: User, todo: Todo | null, action: string, details?: string) {
+    const log = this.logRepo.create({ user, todo, action, details: details ?? null });
+    await this.logRepo.save(log);
+  }
+
+  async getActivityLog(userId: number) {
+    return this.logRepo.find({
+      where: { user: { id: userId } },
+      order: { createdAt: 'DESC' },
+      take: 100, // limit to last 100 actions
+    });
   }
 }
