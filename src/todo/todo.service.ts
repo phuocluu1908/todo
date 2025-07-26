@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DeleteResult, Repository, Between } from 'typeorm';
+import { DeleteResult, Repository, Between, FindOptionsWhere, Like} from 'typeorm';
 import { Todo } from './todo.entity';
 import { User } from '../user/user.entity';
 import { Observable, from } from 'rxjs';
@@ -20,11 +20,27 @@ export class TodoService {
     completed?: boolean,
     page: number = 1,
     limit: number = 10,
-  ): Observable<Todo[]> {
-    const where: any = { user: { id: userId } };
-    if (completed !== undefined) {
-      where.completed = completed;
+    filters?: {
+      priority?: 'low' | 'medium' | 'high',
+      category?: string,
+      dueFrom?: string,
+      dueTo?: string,
+      search?: string,
     }
+  ): Observable<Todo[]> {
+    const where: FindOptionsWhere<Todo> = { user: { id: userId } } as any;
+    if (completed !== undefined) where.completed = completed;
+    if (filters?.priority) where.priority = filters.priority;
+    if (filters?.category) where.category = filters.category;
+    if (filters?.dueFrom && filters?.dueTo) {
+      where.dueDate = Between(new Date(filters.dueFrom), new Date(filters.dueTo));
+    } else if (filters?.dueFrom) {
+      where.dueDate = Between(new Date(filters.dueFrom), new Date('9999-12-31'));
+    } else if (filters?.dueTo) {
+      where.dueDate = Between(new Date('1970-01-01'), new Date(filters.dueTo));
+    }
+    if (filters?.search) where.title = Like(`%${filters.search}%`);
+  
     return from(
       this.todoRepo.find({
         where,

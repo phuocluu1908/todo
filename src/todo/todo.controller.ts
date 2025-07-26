@@ -26,23 +26,30 @@ export class TodoController {
   constructor(private readonly todoService: TodoService) {}
 
   @Get()
-  getTodos(
-    @Request() req,
-    @Query('completed') completed?: string,
-    @Query('page') page: string = '1',
-    @Query('limit') limit: string = '10',
-  ) {
-    // Convert query params to appropriate types
-    const isCompleted =
-      completed !== undefined ? completed === 'true' : undefined;
-    const pageNum = parseInt(page, 10);
-    const limitNum = parseInt(limit, 10);
+getTodos(
+  @Request() req,
+  @Query('completed') completed?: string,
+  @Query('page') page: string = '1',
+  @Query('limit') limit: string = '10',
+  @Query('priority') priority?: 'low' | 'medium' | 'high',
+  @Query('category') category?: string,
+  @Query('dueFrom') dueFrom?: string,
+  @Query('dueTo') dueTo?: string,
+  @Query('search') search?: string,
+) {
+  const isCompleted = completed !== undefined ? completed === 'true' : undefined;
+  const pageNum = parseInt(page, 10);
+  const limitNum = parseInt(limit, 10);
+  const userId = req.user.userId;
 
-    const userId = req.user.userId;
-
-    return this.todoService.getTodos(userId, isCompleted, pageNum, limitNum);
-  }
-
+  return this.todoService.getTodos(
+    userId,
+    isCompleted,
+    pageNum,
+    limitNum,
+    { priority, category, dueFrom, dueTo, search }
+  );
+}
   @Get(':id')
   getTodoById(@Param('id') id: number): Observable<any> {
     return this.todoService.getTodoById(Number(id));
