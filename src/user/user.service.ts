@@ -1,0 +1,65 @@
+import { Injectable } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { User } from './user.entity';
+import * as bcrypt from 'bcryptjs';
+import { UpdateProfileDto } from './dto/update-profile.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
+
+@Injectable()
+export class UserService {
+  constructor(
+    @InjectRepository(User) private readonly userRepo: Repository<User>,
+  ) {}
+
+  async findByUsername(username: string): Promise<User | null> {
+    return this.userRepo.findOne({ where: { username } });
+  }
+
+  async createUser(username: string,
+    email: string,
+    password: string,
+    avatar?: string,): Promise<User> {
+    const hashed = await bcrypt.hash(password, 10);
+    const user = this.userRepo.create({ username, email, password: hashed, avatar });
+    return this.userRepo.save(user);
+  }
+
+  async validateUser(username: string, password: string): Promise<User | null> {
+    const user = await this.findByUsername(username);
+    if (user && await bcrypt.compare(password, user.password)) {
+      return user;
+    }
+    return null;
+  }
+
+  async getProfile(userId: number) {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    // Do not return password
+    const { password, ...profile } = user;
+    return profile;
+  }
+
+  async updateProfile(userId: number, dto: UpdateProfileDto) {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    if (dto.username) user.username = dto.username;
+    if (dto.email) user.email = dto.email;
+    if (dto.avatar) user.avatar = dto.avatar;
+    await this.userRepo.save(user);
+    const { password, ...profile } = user;
+    return profile;
+  }
+
+  async changePassword(userId: number, dto: ChangePasswordDto) {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    const isMatch = await bcrypt.compare(dto.currentPassword, user.password);
+    if (!isMatch) throw new BadRequestException('Current password is incorrect');
+    user.password = await bcrypt.hash(dto.newPassword, 10);
+    await this.userRepo.save(user);
+    return { message: 'Password changed successfully' };
+  }
+}

@@ -1,0 +1,84 @@
+import {
+  Controller,
+  Get,
+  Post,
+  Patch,
+  Delete,
+  Param,
+  Body,
+  UsePipes,
+  ValidationPipe,
+  Query,
+  Request,
+} from '@nestjs/common';
+import { CreateTodoDto } from './dto/create-todo.dto';
+import { TodoService } from './todo.service';
+import { Observable } from 'rxjs';
+import { DeleteResult } from 'typeorm';
+import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import { UseGuards } from '@nestjs/common';
+import { AuthGuard } from '@nestjs/passport';
+
+@UseGuards(AuthGuard('jwt'))
+@Controller('todos')
+export class TodoController {
+  constructor(private readonly todoService: TodoService) {}
+
+  @Get()
+  getTodos(
+    @Request() req,
+    @Query('completed') completed?: string,
+    @Query('page') page: string = '1',
+    @Query('limit') limit: string = '10',
+  ) {
+    // Convert query params to appropriate types
+    const isCompleted =
+      completed !== undefined ? completed === 'true' : undefined;
+    const pageNum = parseInt(page, 10);
+    const limitNum = parseInt(limit, 10);
+
+    const userId = req.user.userId;
+
+    return this.todoService.getTodos(userId, isCompleted, pageNum, limitNum);
+  }
+
+  @Get(':id')
+  getTodoById(@Param('id') id: number): Observable<any> {
+    return this.todoService.getTodoById(Number(id));
+  }
+
+  @Post()
+  @ApiOperation({ summary: 'Create a new todo' })
+  @ApiResponse({
+    status: 201,
+    description: 'The todo has been successfully created.',
+  })
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  createTodo(@Body() createTodoDto: CreateTodoDto, @Request() req) {
+    return this.todoService.createTodo(createTodoDto, req.user.userId);
+  }
+
+  @Patch(':id')
+  updateTodo(
+    @Param('id') id: number,
+    @Body('completed') completed: boolean,
+  ): Observable<any> {
+    return this.todoService.updateTodo(Number(id), completed);
+  }
+
+  @Delete(':id')
+  deleteTodo(@Param('id') id: number): Observable<DeleteResult> {
+    return this.todoService.deleteTodo(Number(id));
+  }
+
+  @Delete(':id/soft')
+  softDeleteTodo(@Param('id') id: string) {
+    return this.todoService.softDeleteTodo(Number(id));
+  }
+
+  // Restore endpoint
+  @Patch(':id/restore')
+  restoreTodo(@Param('id') id: string) {
+    return this.todoService.restoreTodo(Number(id));
+  }
+}
