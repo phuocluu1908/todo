@@ -90,4 +90,9 @@ getTodos(
   restoreTodo(@Param('id') id: string) {
     return this.todoService.restoreTodo(Number(id));
   }
+
+  @Get('activity-log')
+async getActivityLog(@Request() req) {
+  return this.todoService.getActivityLog(req.user.userId);
+}
 }
