@@ -26,4 +26,14 @@ export class UpdateTodoDto {
   @IsOptional()
   @IsString()
   category?: string;
+
+  @ApiPropertyOptional({ enum: ['daily', 'weekly', 'monthly'] })
+  @IsOptional()
+  @IsIn(['daily', 'weekly', 'monthly'])
+  recurrence?: 'daily' | 'weekly' | 'monthly';
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsDateString()
+  recurrenceEnd?: string;
 }

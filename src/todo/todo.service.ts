@@ -85,13 +85,50 @@ export class TodoService {
   async updateTodo(id: number, updateDto: UpdateTodoDto): Promise<Todo> {
     const todo = await this.todoRepo.findOne({ where: { id } });
     if (!todo) throw new NotFoundException(`Todo with id ${id} not found`);
+  
     if (updateDto.title !== undefined) todo.title = updateDto.title;
     if (updateDto.completed !== undefined) todo.completed = updateDto.completed;
-    if (updateDto.dueDate !== undefined)
-      todo.dueDate = updateDto.dueDate ? new Date(updateDto.dueDate) : null;
+    if (updateDto.dueDate !== undefined) todo.dueDate = updateDto.dueDate ? new Date(updateDto.dueDate) : null;
     if (updateDto.priority !== undefined) todo.priority = updateDto.priority;
     if (updateDto.category !== undefined) todo.category = updateDto.category;
-    await this.logActivity(todo.user, todo, 'updated');
+    if (updateDto.recurrence !== undefined) todo.recurrence = updateDto.recurrence;
+    if (updateDto.recurrenceEnd !== undefined) todo.recurrenceEnd = updateDto.recurrenceEnd ? new Date(updateDto.recurrenceEnd) : null;
+  
+    // Handle recurring todos: auto-create next instance if just completed
+    if (
+      updateDto.completed === true &&
+      todo.recurrence &&
+      todo.dueDate &&
+      (!todo.recurrenceEnd || todo.dueDate < new Date(todo.recurrenceEnd))
+    ) {
+      let nextDueDate: Date | null = null;
+      if (todo.recurrence === 'daily') {
+        nextDueDate = new Date(todo.dueDate);
+        nextDueDate.setDate(nextDueDate.getDate() + 1);
+      } else if (todo.recurrence === 'weekly') {
+        nextDueDate = new Date(todo.dueDate);
+        nextDueDate.setDate(nextDueDate.getDate() + 7);
+      } else if (todo.recurrence === 'monthly') {
+        nextDueDate = new Date(todo.dueDate);
+        nextDueDate.setMonth(nextDueDate.getMonth() + 1);
+      }
+      if (
+        nextDueDate &&
+        (!todo.recurrenceEnd || nextDueDate <= new Date(todo.recurrenceEnd))
+      ) {
+        const newTodo = this.todoRepo.create({
+          ...todo,
+          id: undefined,
+          completed: false,
+          dueDate: nextDueDate,
+          createdAt: undefined,
+          updatedAt: undefined,
+          deletedAt: undefined,
+        });
+        await this.todoRepo.save(newTodo);
+      }
+    }
+  
     return this.todoRepo.save(todo);
   }
 

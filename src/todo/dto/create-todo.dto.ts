@@ -22,4 +22,14 @@ export class CreateTodoDto {
   @IsOptional()
   @IsString()
   category?: string;
+
+  @ApiProperty({ example: 'daily', description: 'Recurrence pattern', required: false, enum: ['daily', 'weekly', 'monthly'] })
+  @IsOptional()
+  @IsIn(['daily', 'weekly', 'monthly'])
+  recurrence?: 'daily' | 'weekly' | 'monthly';
+
+  @ApiProperty({ example: '2024-12-31T23:59:59Z', description: 'Recurrence end date', required: false })
+  @IsOptional()
+  @IsDateString()
+  recurrenceEnd?: string;
 }

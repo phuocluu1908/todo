@@ -32,6 +32,12 @@ export class Todo {
   @ManyToOne(() => User, (user) => user.todos, { eager: true })
   user: User;
 
+  @Column({ type: 'varchar', nullable: true })
+  recurrence: 'daily' | 'weekly' | 'monthly' | null;
+
+  @Column({ type: 'datetime', nullable: true })
+  recurrenceEnd: Date | null;
+
   @CreateDateColumn()
   createdAt: Date;
 
