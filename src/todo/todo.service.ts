@@ -77,8 +77,9 @@ export class TodoService {
       category: createTodoDto.category ?? null,
       user,
     });
-    await this.logActivity(user, newTodo, 'created');
-    return this.todoRepo.save(newTodo);
+    const savedTodo = await this.todoRepo.save(newTodo);
+    await this.logActivity(user, savedTodo, 'created');
+    return savedTodo
   }
 
   // Update a todo
@@ -176,5 +177,13 @@ export class TodoService {
       order: { createdAt: 'DESC' },
       take: 100, // limit to last 100 actions
     });
+  }
+
+  public async findAllTodos(): Promise<Todo[]> {
+    return this.todoRepo.find();
+  }
+
+  public async findTodoById(id: number): Promise<Todo | null> {
+    return this.todoRepo.findOne({ where: { id } });
   }
 }

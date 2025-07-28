@@ -6,10 +6,11 @@ import { TodoService } from './todo.service';
 import { TodoController } from './todo.controller';
 import { ReminderService } from './reminder.service';
 import { ActivityLog } from './activity-log.entity';
+import { TodoResolver } from './todo.resolver';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Todo, User, ActivityLog])],
-  providers: [TodoService, ReminderService],
+  providers: [TodoService, ReminderService, TodoResolver],
   controllers: [TodoController],
 })
 export class TodoModule {}
