@@ -1,9 +1,20 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
+import { LoggingInterceptor } from './interceptors/logging.interceptor';
+import { TransformInterceptor } from './interceptors/transform.interceptor';
+import { TimeoutInterceptor } from './interceptors/timeout.interceptor';
+import { ErrorsLoggingInterceptor } from './interceptors/errors-logging.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+
+  app.useGlobalInterceptors(
+    new LoggingInterceptor(),
+    new TransformInterceptor(),
+    new TimeoutInterceptor(),
+    new ErrorsLoggingInterceptor(),
+  );
 
   const config = new DocumentBuilder()
     .setTitle('Todo API')

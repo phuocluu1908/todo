@@ -10,7 +10,7 @@ export class ActivityLog {
   @ManyToOne(() => User, { eager: true })
   user: User;
 
-  @ManyToOne(() => Todo, { eager: true, nullable: true })
+  @ManyToOne(() => Todo, { eager: true, nullable: true, onDelete: 'CASCADE'  })
   todo: Todo | null;
 
   @Column()
