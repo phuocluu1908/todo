@@ -10,7 +10,7 @@ import {
   ValidationPipe,
   Query,
   Request,
-  UseInterceptors
+  UseInterceptors,
 } from '@nestjs/common';
 import { CreateTodoDto } from './dto/create-todo.dto';
 import { TodoService } from './todo.service';
@@ -20,6 +20,9 @@ import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { UseGuards } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { UpdateTodoDto } from './dto/update-todo.dto';
+import { ParseIntPipe } from '../pipes/parse-int.pipe';
+import { TrimPipe } from '../pipes/trim.pipe';
+import { DefaultValuePipe } from '../pipes/default-value.pipe';
 
 @UseGuards(AuthGuard('jwt'))
 @Controller('todos')
@@ -52,8 +55,9 @@ export class TodoController {
       search,
     });
   }
+
   @Get(':id')
-  getTodoById(@Param('id') id: number): Observable<any> {
+  getTodoById(@Param('id', ParseIntPipe) id: number): Observable<any> {
     return this.todoService.getTodoById(Number(id));
   }
 
@@ -64,7 +68,12 @@ export class TodoController {
     description: 'The todo has been successfully created.',
   })
   @UsePipes(new ValidationPipe({ whitelist: true }))
-  async createTodo(@Body() createTodoDto: CreateTodoDto, @Request() req) {
+  async createTodo(
+    @Body('title', TrimPipe) title: string,
+    @Body('priority', new DefaultValuePipe('medium')) priority: string,
+    @Body() createTodoDto: CreateTodoDto,
+    @Request() req,
+  ) {
     return this.todoService.createTodo(createTodoDto, req.user.userId);
   }
 
