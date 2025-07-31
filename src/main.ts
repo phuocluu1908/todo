@@ -5,6 +5,9 @@ import { LoggingInterceptor } from './interceptors/logging.interceptor';
 import { TransformInterceptor } from './interceptors/transform.interceptor';
 import { TimeoutInterceptor } from './interceptors/timeout.interceptor';
 import { ErrorsLoggingInterceptor } from './interceptors/errors-logging.interceptor';
+import { HttpExceptionFilter } from './filters/http-exception.filter';
+import { AllExceptionsFilter } from './filters/all-exceptions.filter';
+import { NotFoundExceptionFilter } from './filters/not-found-exception.filter';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
@@ -14,6 +17,12 @@ async function bootstrap() {
     new TransformInterceptor(),
     new TimeoutInterceptor(),
     new ErrorsLoggingInterceptor(),
+  );
+
+  app.useGlobalFilters(
+    new HttpExceptionFilter(),
+    new AllExceptionsFilter(),
+    new NotFoundExceptionFilter(),
   );
 
   const config = new DocumentBuilder()
