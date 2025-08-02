@@ -23,6 +23,8 @@ import { UpdateTodoDto } from './dto/update-todo.dto';
 import { ParseIntPipe } from '../pipes/parse-int.pipe';
 import { TrimPipe } from '../pipes/trim.pipe';
 import { DefaultValuePipe } from '../pipes/default-value.pipe';
+import { CurrentUser } from 'src/decorators/current-user.decorator';
+import { TodoOwnerGuard } from 'src/guards/todo-owner.guard';
 
 @UseGuards(AuthGuard('jwt'))
 @Controller('todos')
@@ -31,7 +33,7 @@ export class TodoController {
 
   @Get()
   getTodos(
-    @Request() req,
+    @CurrentUser() user,
     @Query('completed') completed?: string,
     @Query('page') page: string = '1',
     @Query('limit') limit: string = '10',
@@ -45,7 +47,7 @@ export class TodoController {
       completed !== undefined ? completed === 'true' : undefined;
     const pageNum = parseInt(page, 10);
     const limitNum = parseInt(limit, 10);
-    const userId = req.user.userId;
+    const userId = user.userId;
 
     return this.todoService.getTodos(userId, isCompleted, pageNum, limitNum, {
       priority,
@@ -57,8 +59,9 @@ export class TodoController {
   }
 
   @Get(':id')
-  getTodoById(@Param('id', ParseIntPipe) id: number): Observable<any> {
-    return this.todoService.getTodoById(Number(id));
+  @UseGuards(TodoOwnerGuard)
+  getTodoById(@Request() req): any {
+    return req.todo;
   }
 
   @Post()
