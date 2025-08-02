@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Get, Patch, UseGuards, Request, ValidationPipe, UsePipes } from '@nestjs/common';
+import { Controller, Post, Body, Get, Patch, UseGuards, Request, ValidationPipe, UsePipes, Delete, Param } from '@nestjs/common';
 import { UserService } from './user.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
@@ -10,9 +10,9 @@ export class UserController {
 
   @Post('register')
   async register(
-    @Body() body: { username: string; email: string; password: string; avatar?: string }
+    @Body() body: { username: string; email: string; password: string; avatar?: string, roles?: string[] }
   ) {
-    return this.userService.createUser(body.username, body.email, body.password, body.avatar);
+    return this.userService.createUser(body.username, body.email, body.password, body.avatar, body.roles);
   }
 
   @UseGuards(AuthGuard('jwt'))
@@ -33,5 +33,12 @@ export class UserController {
   @UsePipes(new ValidationPipe({ whitelist: true }))
   async changePassword(@Request() req, @Body() dto: ChangePasswordDto) {
     return this.userService.changePassword(req.user.userId, dto);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Delete('delete/:id')
+  @UsePipes(new ValidationPipe({ whitelist: true }))
+  async deleteUser(@Param('id') id) {
+    return this.userService.deleteUser(id);
   }
 }

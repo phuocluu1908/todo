@@ -11,6 +11,7 @@ import {
   Query,
   Request,
   UseInterceptors,
+  SetMetadata,
 } from '@nestjs/common';
 import { CreateTodoDto } from './dto/create-todo.dto';
 import { TodoService } from './todo.service';
@@ -25,6 +26,8 @@ import { TrimPipe } from '../pipes/trim.pipe';
 import { DefaultValuePipe } from '../pipes/default-value.pipe';
 import { CurrentUser } from 'src/decorators/current-user.decorator';
 import { TodoOwnerGuard } from 'src/guards/todo-owner.guard';
+import { OrGuard } from 'src/guards/or.guard';
+import { RolesGuard } from 'src/guards/roles.guard';
 
 @UseGuards(AuthGuard('jwt'))
 @Controller('todos')

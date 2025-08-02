@@ -15,7 +15,7 @@ export class TodoOwnerGuard implements CanActivate {
     if (!todo) {
       throw new NotFoundException('Todo not found');
     }
-    if (todo.user.id !== user.userId) {
+    if (todo.user.id !== user.userId && !request?.user?.roles?.includes('admin')) {
       throw new ForbiddenException('You do not have access to this todo');
     }
 

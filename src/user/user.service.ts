@@ -17,18 +17,27 @@ export class UserService {
     return this.userRepo.findOne({ where: { username } });
   }
 
-  async createUser(username: string,
+  async createUser(
+    username: string,
     email: string,
     password: string,
-    avatar?: string,): Promise<User> {
+    avatar?: string,
+    roles?: string[],
+  ): Promise<User> {
     const hashed = await bcrypt.hash(password, 10);
-    const user = this.userRepo.create({ username, email, password: hashed, avatar });
+    const user = this.userRepo.create({
+      username,
+      email,
+      password: hashed,
+      avatar,
+      roles,
+    });
     return this.userRepo.save(user);
   }
 
   async validateUser(username: string, password: string): Promise<User | null> {
     const user = await this.findByUsername(username);
-    if (user && await bcrypt.compare(password, user.password)) {
+    if (user && (await bcrypt.compare(password, user.password))) {
       return user;
     }
     return null;
@@ -57,9 +66,17 @@ export class UserService {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
     const isMatch = await bcrypt.compare(dto.currentPassword, user.password);
-    if (!isMatch) throw new BadRequestException('Current password is incorrect');
+    if (!isMatch)
+      throw new BadRequestException('Current password is incorrect');
     user.password = await bcrypt.hash(dto.newPassword, 10);
     await this.userRepo.save(user);
     return { message: 'Password changed successfully' };
+  }
+
+  async deleteUser(userId: number) {
+    const userToRemove = await this.userRepo.findOne({ where: { id: userId } });
+    if (userToRemove) {
+      await this.userRepo.remove(userToRemove);
+    }
   }
 }
