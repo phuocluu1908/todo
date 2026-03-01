@@ -1,6 +1,12 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DeleteResult, Repository, Between, FindOptionsWhere, Like} from 'typeorm';
+import {
+  DeleteResult,
+  Repository,
+  Between,
+  FindOptionsWhere,
+  Like,
+} from 'typeorm';
 import { Todo } from './todo.entity';
 import { User } from '../user/user.entity';
 import { Observable, from } from 'rxjs';
@@ -13,7 +19,8 @@ export class TodoService {
   constructor(
     @InjectRepository(Todo) private readonly todoRepo: Repository<Todo>,
     @InjectRepository(User) private readonly userRepo: Repository<User>,
-    @InjectRepository(ActivityLog) private readonly logRepo: Repository<ActivityLog>,
+    @InjectRepository(ActivityLog)
+    private readonly logRepo: Repository<ActivityLog>,
   ) {}
 
   // Get all todos
@@ -23,26 +30,32 @@ export class TodoService {
     page: number = 1,
     limit: number = 10,
     filters?: {
-      priority?: 'low' | 'medium' | 'high',
-      category?: string,
-      dueFrom?: string,
-      dueTo?: string,
-      search?: string,
-    }
+      priority?: 'low' | 'medium' | 'high';
+      category?: string;
+      dueFrom?: string;
+      dueTo?: string;
+      search?: string;
+    },
   ): Observable<Todo[]> {
-    const where: FindOptionsWhere<Todo> = { user: { id: userId } } as any;
+    const where: FindOptionsWhere<Todo> = { user: { id: userId } };
     if (completed !== undefined) where.completed = completed;
     if (filters?.priority) where.priority = filters.priority;
     if (filters?.category) where.category = filters.category;
     if (filters?.dueFrom && filters?.dueTo) {
-      where.dueDate = Between(new Date(filters.dueFrom), new Date(filters.dueTo));
+      where.dueDate = Between(
+        new Date(filters.dueFrom),
+        new Date(filters.dueTo),
+      );
     } else if (filters?.dueFrom) {
-      where.dueDate = Between(new Date(filters.dueFrom), new Date('9999-12-31'));
+      where.dueDate = Between(
+        new Date(filters.dueFrom),
+        new Date('9999-12-31'),
+      );
     } else if (filters?.dueTo) {
       where.dueDate = Between(new Date('1970-01-01'), new Date(filters.dueTo));
     }
     if (filters?.search) where.title = Like(`%${filters.search}%`);
-  
+
     return from(
       this.todoRepo.find({
         where,
@@ -79,22 +92,27 @@ export class TodoService {
     });
     const savedTodo = await this.todoRepo.save(newTodo);
     await this.logActivity(user, savedTodo, 'created');
-    return savedTodo
+    return savedTodo;
   }
 
   // Update a todo
   async updateTodo(id: number, updateDto: UpdateTodoDto): Promise<Todo> {
     const todo = await this.todoRepo.findOne({ where: { id } });
     if (!todo) throw new NotFoundException(`Todo with id ${id} not found`);
-  
+
     if (updateDto.title !== undefined) todo.title = updateDto.title;
     if (updateDto.completed !== undefined) todo.completed = updateDto.completed;
-    if (updateDto.dueDate !== undefined) todo.dueDate = updateDto.dueDate ? new Date(updateDto.dueDate) : null;
+    if (updateDto.dueDate !== undefined)
+      todo.dueDate = updateDto.dueDate ? new Date(updateDto.dueDate) : null;
     if (updateDto.priority !== undefined) todo.priority = updateDto.priority;
     if (updateDto.category !== undefined) todo.category = updateDto.category;
-    if (updateDto.recurrence !== undefined) todo.recurrence = updateDto.recurrence;
-    if (updateDto.recurrenceEnd !== undefined) todo.recurrenceEnd = updateDto.recurrenceEnd ? new Date(updateDto.recurrenceEnd) : null;
-  
+    if (updateDto.recurrence !== undefined)
+      todo.recurrence = updateDto.recurrence;
+    if (updateDto.recurrenceEnd !== undefined)
+      todo.recurrenceEnd = updateDto.recurrenceEnd
+        ? new Date(updateDto.recurrenceEnd)
+        : null;
+
     // Handle recurring todos: auto-create next instance if just completed
     if (
       updateDto.completed === true &&
@@ -129,7 +147,7 @@ export class TodoService {
         await this.todoRepo.save(newTodo);
       }
     }
-  
+
     return this.todoRepo.save(todo);
   }
 
@@ -166,8 +184,18 @@ export class TodoService {
     return from(this.todoRepo.restore(id));
   }
 
-  private async logActivity(user: User, todo: Todo | null, action: string, details?: string) {
-    const log = this.logRepo.create({ user, todo, action, details: details ?? null });
+  private async logActivity(
+    user: User,
+    todo: Todo | null,
+    action: string,
+    details?: string,
+  ) {
+    const log = this.logRepo.create({
+      user,
+      todo,
+      action,
+      details: details ?? null,
+    });
     await this.logRepo.save(log);
   }
 

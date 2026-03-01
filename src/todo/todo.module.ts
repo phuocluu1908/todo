@@ -12,7 +12,13 @@ import { TodoOwnerGuard } from 'src/guards/todo-owner.guard';
 
 @Module({
   imports: [TypeOrmModule.forFeature([Todo, User, ActivityLog])],
-  providers: [TodoService, ReminderService, TodoResolver, RolesGuard, TodoOwnerGuard],
+  providers: [
+    TodoService,
+    ReminderService,
+    TodoResolver,
+    RolesGuard,
+    TodoOwnerGuard,
+  ],
   controllers: [TodoController],
 })
 export class TodoModule {}

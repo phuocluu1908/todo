@@ -17,6 +17,10 @@ export class UserService {
     return this.userRepo.findOne({ where: { username } });
   }
 
+  async getAllUser() {
+    return this.userRepo.find()
+  }
+
   async createUser(
     username: string,
     email: string,

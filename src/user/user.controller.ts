@@ -1,8 +1,22 @@
-import { Controller, Post, Body, Get, Patch, UseGuards, Request, ValidationPipe, UsePipes, Delete, Param } from '@nestjs/common';
+import {
+  Controller,
+  Post,
+  Body,
+  Get,
+  Patch,
+  UseGuards,
+  Request,
+  ValidationPipe,
+  UsePipes,
+  Delete,
+  Param,
+  SetMetadata,
+} from '@nestjs/common';
 import { UserService } from './user.service';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
 import { AuthGuard } from '@nestjs/passport';
+import { RolesGuard } from 'src/guards/roles.guard';
 
 @Controller('user')
 export class UserController {
@@ -10,9 +24,29 @@ export class UserController {
 
   @Post('register')
   async register(
-    @Body() body: { username: string; email: string; password: string; avatar?: string, roles?: string[] }
+    @Body()
+    body: {
+      username: string;
+      email: string;
+      password: string;
+      avatar?: string;
+      roles?: string[];
+    },
   ) {
-    return this.userService.createUser(body.username, body.email, body.password, body.avatar, body.roles);
+    return this.userService.createUser(
+      body.username,
+      body.email,
+      body.password,
+      body.avatar,
+      body.roles,
+    );
+  }
+
+  @SetMetadata('roles', ['admin'])
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Get()
+  async getAllUsers() {
+    return this.userService.getAllUser();
   }
 
   @UseGuards(AuthGuard('jwt'))
@@ -35,7 +69,8 @@ export class UserController {
     return this.userService.changePassword(req.user.userId, dto);
   }
 
-  @UseGuards(AuthGuard('jwt'))
+  @SetMetadata('roles', ['admin'])
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
   @Delete('delete/:id')
   @UsePipes(new ValidationPipe({ whitelist: true }))
   async deleteUser(@Param('id') id) {
