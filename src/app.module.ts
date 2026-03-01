@@ -19,8 +19,8 @@ import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
     GraphQLModule.forRoot<ApolloDriverConfig>({
       driver: ApolloDriver,
       autoSchemaFile: true, // Generates schema automatically
-      playground: true,     // Enables GraphQL Playground
-      path: 'graph/todo'
+      playground: true, // Enables GraphQL Playground
+      path: 'graph/todo',
     }),
     TodoModule, // Import the Todo Module
     UserModule,

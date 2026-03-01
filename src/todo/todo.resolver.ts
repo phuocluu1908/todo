@@ -5,30 +5,30 @@ import { CreateTodoDto } from './dto/create-todo.dto';
 import { UpdateTodoDto } from './dto/update-todo.dto';
 import { Todo } from './todo.entity';
 
-@Resolver(of => TodoType)
+@Resolver((of) => TodoType)
 export class TodoResolver {
   constructor(private readonly todoService: TodoService) {}
 
-  @Query(returns => [TodoType])
+  @Query((returns) => [TodoType])
   async todos(): Promise<Todo[]> {
     // For demo: return all todos (in real app, filter by user)
-    return this.todoService.findAllTodos();;
+    return this.todoService.findAllTodos();
   }
 
-  @Query(returns => TodoType, { nullable: true })
-  async todo(@Args('id', { type: () => Int }) id: number): Promise<Todo | null> {
+  @Query((returns) => TodoType, { nullable: true })
+  async todo(
+    @Args('id', { type: () => Int }) id: number,
+  ): Promise<Todo | null> {
     return this.todoService.findTodoById(id);
   }
-  
-  @Mutation(returns => TodoType)
-  async createTodo(
-    @Args('input') input: CreateTodoDto,
-  ): Promise<Todo> {
+
+  @Mutation((returns) => TodoType)
+  async createTodo(@Args('input') input: CreateTodoDto): Promise<Todo> {
     // For demo: use userId=1, in real app, get from context
     return this.todoService.createTodo(input, 1);
   }
-  
-  @Mutation(returns => TodoType)
+
+  @Mutation((returns) => TodoType)
   async updateTodo(
     @Args('id', { type: () => Int }) id: number,
     @Args('input') input: UpdateTodoDto,
@@ -36,7 +36,7 @@ export class TodoResolver {
     return this.todoService.updateTodo(id, input);
   }
 
-  @Mutation(returns => Boolean)
+  @Mutation((returns) => Boolean)
   async deleteTodo(
     @Args('id', { type: () => Int }) id: number,
   ): Promise<boolean> {

@@ -11,7 +11,7 @@ export class ReminderService {
   @Cron(CronExpression.EVERY_MINUTE)
   async handleReminders() {
     const dueTodos = await this.todoService.findTodosDueSoon(10); // next 10 minutes
-    dueTodos.forEach(todo => {
+    dueTodos.forEach((todo) => {
       this.logger.log(
         `Reminder: Todo "${todo.title}" for user "${todo.user.username}" is due at ${todo.dueDate}`,
       );
