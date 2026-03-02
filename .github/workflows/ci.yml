@@ -9,6 +9,10 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    env:
+      DOCKER_REGISTRY: docker.io
+      DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+      DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
 
@@ -27,11 +31,11 @@ jobs:
         run: yarn build
 
       - name: Build and push Docker image (optional)
-        if: secrets.DOCKER_USERNAME && secrets.DOCKER_PASSWORD && github.ref == 'refs/heads/main'
+        if: github.ref == 'refs/heads/main' && env.DOCKER_USERNAME != '' && env.DOCKER_PASSWORD != ''
         uses: docker/build-push-action@v4
         with:
           push: true
-          tags: ${{ secrets.DOCKER_REGISTRY }}/${{ secrets.DOCKER_USERNAME }}/todo-app:latest
+          tags: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_USERNAME }}/todo-app:latest
           build-args: |
             NODE_ENV=production
         env:
