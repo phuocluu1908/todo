@@ -8,7 +8,7 @@ const username = process.env.DB_USER ?? 'root';
 const password = process.env.DB_PASSWORD ?? '';
 const database = process.env.DB_NAME ?? 'todo_db';
 
-export const AppDataSource = new DataSource({
+const AppDataSource = new DataSource({
   type: 'mysql',
   host,
   port,
