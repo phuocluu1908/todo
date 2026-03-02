@@ -4,7 +4,7 @@ export class Init1772459710140 implements MigrationInterface {
   public async up(queryRunner: QueryRunner): Promise<void> {
     // Create `user` table
     await queryRunner.query(`
-      CREATE TABLE IF NOT EXISTS `user` (
+      CREATE TABLE IF NOT EXISTS \`user\` (
         id int NOT NULL AUTO_INCREMENT,
         username varchar(255) NOT NULL,
         email varchar(255) NOT NULL,
@@ -34,7 +34,7 @@ export class Init1772459710140 implements MigrationInterface {
         deletedAt datetime DEFAULT NULL,
         PRIMARY KEY (id),
         KEY fk_todo_user (userId),
-        CONSTRAINT fk_todo_user FOREIGN KEY (userId) REFERENCES `user` (id)
+        CONSTRAINT fk_todo_user FOREIGN KEY (userId) REFERENCES \`user\` (id)
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
 
@@ -50,7 +50,7 @@ export class Init1772459710140 implements MigrationInterface {
         PRIMARY KEY (id),
         KEY fk_activity_user (userId),
         KEY fk_activity_todo (todoId),
-        CONSTRAINT fk_activity_user FOREIGN KEY (userId) REFERENCES `user` (id),
+        CONSTRAINT fk_activity_user FOREIGN KEY (userId) REFERENCES \`user\` (id),
         CONSTRAINT fk_activity_todo FOREIGN KEY (todoId) REFERENCES todo (id) ON DELETE CASCADE
       ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
     `);
@@ -59,6 +59,6 @@ export class Init1772459710140 implements MigrationInterface {
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`DROP TABLE IF EXISTS activity_log;`);
     await queryRunner.query(`DROP TABLE IF EXISTS todo;`);
-    await queryRunner.query(`DROP TABLE IF EXISTS `user`;`);
+    await queryRunner.query(`DROP TABLE IF EXISTS \`user\`;`);
   }
 }
