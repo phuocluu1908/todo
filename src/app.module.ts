@@ -17,7 +17,8 @@ import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
       password: process.env.DB_PASSWORD ?? '',
       database: process.env.DB_NAME ?? 'todo_db',
       entities: [__dirname + '/**/*.entity{.ts,.js}'],
-      synchronize: true, // Auto-create tables (dev only)
+      synchronize: process.env.TYPEORM_SYNCHRONIZE === 'true', // disable auto-sync in prod
+      migrations: [__dirname + '/migrations/*{.ts,.js}'],
     }),
     ScheduleModule.forRoot(),
     GraphQLModule.forRoot<ApolloDriverConfig>({
