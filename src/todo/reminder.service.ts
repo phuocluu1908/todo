@@ -13,6 +13,7 @@ export class ReminderService {
     const dueTodos = await this.todoService.findTodosDueSoon(10); // next 10 minutes
     dueTodos.forEach((todo) => {
       this.logger.log(
+        // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
         `Reminder: Todo "${todo.title}" for user "${todo.user.username}" is due at ${todo.dueDate}`,
       );
     });
