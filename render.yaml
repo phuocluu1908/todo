@@ -1,0 +1,29 @@
+services:
+  - type: web
+    name: todo-app
+    env: node
+    branch: main
+    buildCommand: yarn install && yarn build
+    startCommand: node dist/main
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "3000"
+      - key: DB_HOST
+        value: ""
+      - key: DB_PORT
+        value: ""
+      - key: DB_USER
+        value: ""
+      - key: DB_NAME
+        value: ""
+      - key: DB_PASSWORD
+        value: "" # mark this as secret in Render UI
+      - key: JWT_SECRET
+        value: "" # set in Render UI as secret
+
+# Notes:
+# - Do NOT commit secret values. After you create the service in Render, set the secret/secret env values
+#   (DB_PASSWORD, JWT_SECRET) in the Render Dashboard or via Render's CLI.
+# - You can add a `postdeploy` command to run migrations if desired.
