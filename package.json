@@ -46,7 +46,7 @@
     "class-validator": "^0.14.2",
     "express": "^5.2.1",
     "graphql": "^16.11.0",
-    "mysql2": "^3.18.2",
+    "pg": "^8.11.0",
     "passport": "^0.7.0",
     "passport-jwt": "^4.0.1",
     "reflect-metadata": "^0.2.2",
