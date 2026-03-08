@@ -4,7 +4,8 @@ services:
     env: node
     branch: main
     buildCommand: yarn install --frozen-lockfile --production=false && yarn build
-    startCommand: yarn migration:run && node dist/main
+    startCommand: node dist/src/main
+    postdeploy: yarn wait-for-db && yarn migration:run
     envVars:
       - key: NODE_ENV
         value: production
