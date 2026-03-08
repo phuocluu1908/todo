@@ -21,4 +21,5 @@ RUN yarn install --production --frozen-lockfile
 COPY --from=builder /app/dist ./dist
 
 EXPOSE 3000
-CMD ["node", "dist/src/main"]
+# Run migrations (using compiled JS, no ts-node needed) then start app
+CMD ["sh", "-c", "node node_modules/typeorm/cli.js migration:run -d dist/src/data-source.js && node dist/src/main"]
