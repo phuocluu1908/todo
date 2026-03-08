@@ -3,7 +3,7 @@ services:
     name: todo-app
     env: node
     branch: main
-    buildCommand: yarn install && yarn build
+    buildCommand: yarn install --frozen-lockfile --production=false && yarn build
     startCommand: yarn migration:run && node dist/main
     envVars:
       - key: NODE_ENV
