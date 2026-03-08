@@ -20,7 +20,7 @@ export class Todo {
   @Column({ default: false })
   completed: boolean;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
   dueDate: Date | null;
 
   @Column({ type: 'varchar', default: 'medium' })
@@ -35,7 +35,7 @@ export class Todo {
   @Column({ type: 'varchar', nullable: true })
   recurrence: 'daily' | 'weekly' | 'monthly' | null;
 
-  @Column({ type: 'datetime', nullable: true })
+  @Column({ type: 'timestamptz', nullable: true })
   recurrenceEnd: Date | null;
 
   @CreateDateColumn()
