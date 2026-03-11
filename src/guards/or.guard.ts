@@ -1,4 +1,10 @@
-import { CanActivate, ExecutionContext, Injectable, Type, mixin } from '@nestjs/common';
+import {
+  CanActivate,
+  ExecutionContext,
+  Injectable,
+  Type,
+  mixin,
+} from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 
 export function OrGuard(...guards: Type<CanActivate>[]) {

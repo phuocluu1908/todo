@@ -1,4 +1,10 @@
-import { Entity, PrimaryGeneratedColumn, Column, ManyToOne, CreateDateColumn } from 'typeorm';
+import {
+  Entity,
+  PrimaryGeneratedColumn,
+  Column,
+  ManyToOne,
+  CreateDateColumn,
+} from 'typeorm';
 import { User } from '../user/user.entity';
 import { Todo } from './todo.entity';
 
@@ -10,7 +16,7 @@ export class ActivityLog {
   @ManyToOne(() => User, { eager: true })
   user: User;
 
-  @ManyToOne(() => Todo, { eager: true, nullable: true, onDelete: 'CASCADE'  })
+  @ManyToOne(() => Todo, { eager: true, nullable: true, onDelete: 'CASCADE' })
   todo: Todo | null;
 
   @Column()

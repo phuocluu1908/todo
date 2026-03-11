@@ -23,7 +23,7 @@ export class User {
   @Column({ nullable: true })
   avatar: string; // <-- New field
 
-  @Column({ nullable: true, type: 'simple-array'  })
+  @Column({ nullable: true, type: 'simple-array' })
   roles: string[]; // <-- New field
 
   @Column()

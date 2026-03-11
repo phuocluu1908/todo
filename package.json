@@ -12,6 +12,8 @@
   "scripts": {
     "build": "nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
+    "format:all": "prettier --write \"**/*.{ts,js,json,md}\" --ignore-path .gitignore",
+    "lint:fix": "eslint . --ext .ts,.js --fix --ignore-path .gitignore",
     "start": "nest start",
     "start:dev": "nest start --watch",
     "start:debug": "nest start --debug --watch",

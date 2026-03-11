@@ -10,7 +10,10 @@ const password = process.env.DB_PASSWORD ?? '';
 const database = process.env.DB_NAME ?? 'todo_db';
 
 // Determine SSL: enable when using a DATABASE_URL that requests sslmode=require
-const shouldUseSsl = !!(process.env.DB_SSL === 'true' || (databaseUrl && databaseUrl.includes('sslmode=require')));
+const shouldUseSsl = !!(
+  process.env.DB_SSL === 'true' ||
+  (databaseUrl && databaseUrl.includes('sslmode=require'))
+);
 
 const AppDataSource = new DataSource({
   type: 'postgres',

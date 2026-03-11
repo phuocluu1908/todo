@@ -12,15 +12,20 @@ import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
     TypeOrmModule.forRootAsync({
       useFactory: () => {
         const databaseUrl = process.env.DATABASE_URL;
-        const shouldUseSsl = !!(process.env.DB_SSL === 'true' || (databaseUrl && databaseUrl.includes('sslmode=require')));
+        const shouldUseSsl = !!(
+          process.env.DB_SSL === 'true' ||
+          (databaseUrl && databaseUrl.includes('sslmode=require'))
+        );
         const base: any = {
           type: 'postgres',
           url: databaseUrl ?? undefined,
-          host: databaseUrl ? undefined : process.env.DB_HOST ?? '127.0.0.1',
+          host: databaseUrl ? undefined : (process.env.DB_HOST ?? '127.0.0.1'),
           port: databaseUrl ? undefined : Number(process.env.DB_PORT ?? 5432),
-          username: databaseUrl ? undefined : process.env.DB_USER ?? 'root',
-          password: databaseUrl ? undefined : process.env.DB_PASSWORD ?? '',
-          database: databaseUrl ? undefined : process.env.DB_NAME ?? 'todo_db',
+          username: databaseUrl ? undefined : (process.env.DB_USER ?? 'root'),
+          password: databaseUrl ? undefined : (process.env.DB_PASSWORD ?? ''),
+          database: databaseUrl
+            ? undefined
+            : (process.env.DB_NAME ?? 'todo_db'),
           entities: [__dirname + '/**/*.entity{.ts,.js}'],
           synchronize: process.env.TYPEORM_SYNCHRONIZE === 'true',
           migrations: [__dirname + '/migrations/*{.ts,.js}'],

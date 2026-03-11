@@ -1,4 +1,10 @@
-import { IsOptional, IsString, IsBoolean, IsDateString, IsIn } from 'class-validator';
+import {
+  IsOptional,
+  IsString,
+  IsBoolean,
+  IsDateString,
+  IsIn,
+} from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { InputType, Field } from '@nestjs/graphql';
 

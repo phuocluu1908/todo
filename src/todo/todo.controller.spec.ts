@@ -40,7 +40,9 @@ describe('TodoService', () => {
     service = module.get<TodoService>(TodoService);
     repo = module.get<Repository<Todo>>(getRepositoryToken(Todo));
     userRepo = module.get<Repository<User>>(getRepositoryToken(User));
-    logRepo = module.get<Repository<ActivityLog>>(getRepositoryToken(ActivityLog));
+    logRepo = module.get<Repository<ActivityLog>>(
+      getRepositoryToken(ActivityLog),
+    );
 
     // Provide basic mocks for Repository methods used by the service
     if (!repo.create) (repo as any).create = jest.fn((obj) => obj);

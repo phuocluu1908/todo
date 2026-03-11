@@ -10,9 +10,18 @@ describe('TodoService', () => {
   let service: TodoService;
 
   beforeEach(async () => {
-    const todoRepoMock = { create: jest.fn(), save: jest.fn(), findOne: jest.fn(), find: jest.fn() } as any;
+    const todoRepoMock = {
+      create: jest.fn(),
+      save: jest.fn(),
+      findOne: jest.fn(),
+      find: jest.fn(),
+    } as any;
     const userRepoMock = { findOne: jest.fn() } as any;
-    const logRepoMock = { create: jest.fn(), save: jest.fn(), find: jest.fn() } as any;
+    const logRepoMock = {
+      create: jest.fn(),
+      save: jest.fn(),
+      find: jest.fn(),
+    } as any;
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
