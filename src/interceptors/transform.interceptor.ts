@@ -9,9 +9,12 @@ import { map } from 'rxjs/operators';
 
 @Injectable()
 export class TransformInterceptor implements NestInterceptor {
-  intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
+  intercept(
+    context: ExecutionContext,
+    next: CallHandler,
+  ): Observable<{ status: string; data: unknown; timestamp: string }> {
     return next.handle().pipe(
-      map((data) => ({
+      map((data: unknown) => ({
         status: 'success',
         data,
         timestamp: new Date().toISOString(),
