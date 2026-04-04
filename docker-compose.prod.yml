@@ -31,6 +31,41 @@ services:
     networks:
       - app-network
 
+  redis:
+    image: redis:7-alpine
+    container_name: todo-redis-prod
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - app-network
+
+  auth:
+    build:
+      context: ./services/auth
+      dockerfile: Dockerfile
+    image: todo-auth:latest
+    restart: unless-stopped
+    env_file: services/auth/.env.example
+    ports:
+      - "3001:3001"
+    networks:
+      - app-network
+
+  events:
+    build:
+      context: ./services/events
+      dockerfile: Dockerfile
+    image: todo-events:latest
+    restart: unless-stopped
+    env_file: services/events/.env.example
+    depends_on:
+      - redis
+    ports:
+      - "3002:3002"
+    networks:
+      - app-network
+
 volumes:
   db_data:
 
