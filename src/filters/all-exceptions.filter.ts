@@ -19,17 +19,22 @@ export class AllExceptionsFilter implements ExceptionFilter {
         ? exception.getStatus()
         : HttpStatus.INTERNAL_SERVER_ERROR;
 
-    const message =
-      exception instanceof HttpException
-        ? exception.getResponse()
-        : 'Internal server error';
+    let message = 'Internal server error';
+    if (exception instanceof HttpException) {
+      const response = exception.getResponse();
+      message =
+        typeof response === 'string'
+          ? response
+          : (response as Record<string, string>).message ||
+            'Internal server error';
+    }
     console.log('ex', exception);
     response.status(status).json({
       status: 'fail',
       statusCode: status,
       timestamp: new Date().toISOString(),
       path: request.url,
-      message: typeof message === 'string' ? message : (message as any).message,
+      message,
     });
   }
 }

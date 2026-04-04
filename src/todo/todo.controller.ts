@@ -61,6 +61,34 @@ export class TodoController {
     });
   }
 
+  @Get('board')
+  async getBoard(
+    @CurrentUser() user,
+    @Query('includeCompleted') includeCompleted?: string,
+  ) {
+    const shouldIncludeCompleted =
+      includeCompleted === undefined ? true : includeCompleted === 'true';
+    return this.todoService.getBoard(user.userId, shouldIncludeCompleted);
+  }
+
+  @Get('columns')
+  async getBoardColumns(@CurrentUser() user) {
+    return this.todoService.getBoardColumns(user.userId);
+  }
+
+  @Patch('columns')
+  async saveBoardColumns(
+    @CurrentUser() user,
+    @Body('columns') columns: string[] = [],
+  ) {
+    return this.todoService.saveBoardColumns(user.userId, columns);
+  }
+
+  @Get('activity-log')
+  async getActivityLog(@Request() req) {
+    return this.todoService.getActivityLog(req.user.userId);
+  }
+
   @Get(':id')
   @UseGuards(TodoOwnerGuard)
   getTodoById(@Request() req): any {
@@ -105,8 +133,4 @@ export class TodoController {
     return this.todoService.restoreTodo(Number(id));
   }
 
-  @Get('activity-log')
-  async getActivityLog(@Request() req) {
-    return this.todoService.getActivityLog(req.user.userId);
-  }
 }

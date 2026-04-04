@@ -26,6 +26,9 @@ export class User {
   @Column({ nullable: true, type: 'simple-array' })
   roles: string[]; // <-- New field
 
+  @Column({ nullable: true, type: 'simple-array' })
+  boardColumns: string[];
+
   @Column()
   password: string; // Hashed password
 

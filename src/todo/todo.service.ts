@@ -66,6 +66,100 @@ export class TodoService {
     );
   }
 
+  async getBoard(userId: number, includeCompleted = true) {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    const preferences = (user?.boardColumns || []).filter(Boolean);
+
+    const todos = await this.todoRepo.find({
+      where: { user: { id: userId } },
+      order: { id: 'ASC' },
+    });
+
+    const grouped = new Map<string, Todo[]>();
+    const done: Todo[] = [];
+
+    for (const todo of todos) {
+      if (todo.completed) {
+        if (includeCompleted) done.push(todo);
+        continue;
+      }
+
+      const key = (todo.category || 'Uncategorized').trim() || 'Uncategorized';
+      const current = grouped.get(key) || [];
+      current.push(todo);
+      grouped.set(key, current);
+    }
+
+    const groupedKeys = Array.from(grouped.keys());
+    const groupedByLower = new Map<string, Todo[]>();
+    for (const [key, value] of grouped.entries()) {
+      groupedByLower.set(key.toLowerCase(), value);
+    }
+    const sortedRemainingKeys = groupedKeys
+      .filter(
+        (title) =>
+          !preferences.some((preferred) => preferred.toLowerCase() === title.toLowerCase()),
+      )
+      .sort((a, b) => a.localeCompare(b));
+
+    const orderedTitles = [
+      ...preferences.filter((title) => title.toLowerCase() !== 'done'),
+      ...sortedRemainingKeys,
+    ];
+
+    const dedupedOrderedTitles = orderedTitles.filter(
+      (title, index) =>
+        orderedTitles.findIndex((item) => item.toLowerCase() === title.toLowerCase()) === index,
+    );
+
+    const columns = dedupedOrderedTitles.map((title) => ({
+      id: `category:${title.toLowerCase()}`,
+      title,
+      todos: groupedByLower.get(title.toLowerCase()) || [],
+    }));
+
+    if (includeCompleted) {
+      columns.push({
+        id: 'done',
+        title: 'Done',
+        todos: done,
+      });
+    }
+
+    return {
+      columns,
+      total: todos.length,
+      columnPreferences: dedupedOrderedTitles,
+    };
+  }
+
+  async getBoardColumns(userId: number) {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    return {
+      columns: (user?.boardColumns || []).filter(Boolean),
+    };
+  }
+
+  async saveBoardColumns(userId: number, columns: string[]) {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException(`User with id ${userId} not found`);
+
+    const normalized = (columns || [])
+      .map((value) => (value || '').trim())
+      .filter((value) => !!value && value.toLowerCase() !== 'done')
+      .filter(
+        (value, index, list) =>
+          list.findIndex((item) => item.toLowerCase() === value.toLowerCase()) === index,
+      );
+
+    user.boardColumns = normalized;
+    await this.userRepo.save(user);
+
+    return {
+      columns: normalized,
+    };
+  }
+
   // Get a single todo
   getTodoById(id: number): Observable<Todo | null> {
     return from(

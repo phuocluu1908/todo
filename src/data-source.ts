@@ -15,19 +15,36 @@ const shouldUseSsl = !!(
   (databaseUrl && databaseUrl.includes('sslmode=require'))
 );
 
-const AppDataSource = new DataSource({
-  type: 'postgres',
-  // prefer full DATABASE_URL if provided (useful for Neon, Heroku, etc.)
-  url: databaseUrl ?? undefined,
-  host: databaseUrl ? undefined : host,
-  port: databaseUrl ? undefined : port,
-  username: databaseUrl ? undefined : username,
-  password: databaseUrl ? undefined : password,
-  database: databaseUrl ? undefined : database,
+// Allow a lightweight sqlite fallback for local dev when no Postgres config is provided
+const useSqliteFallback =
+  process.env.DB_TYPE === 'sqlite' || (!databaseUrl && !process.env.DB_HOST);
+
+const common = {
   entities: [path.join(__dirname, '/**/*.entity{.ts,.js}')],
   migrations: [path.join(__dirname, '/migrations/*{.ts,.js}')],
-  synchronize: false,
-  ...(shouldUseSsl ? { ssl: { rejectUnauthorized: false } } : {}),
-});
+};
+
+const AppDataSource = new DataSource(
+  useSqliteFallback
+    ? {
+        type: 'sqlite',
+        database: process.env.SQLITE_DB || 'todo.sqlite',
+        synchronize: true,
+        ...common,
+      }
+    : {
+        type: 'postgres',
+        // prefer full DATABASE_URL if provided (useful for Neon, Heroku, etc.)
+        url: databaseUrl ?? undefined,
+        host: databaseUrl ? undefined : host,
+        port: databaseUrl ? undefined : port,
+        username: databaseUrl ? undefined : username,
+        password: databaseUrl ? undefined : password,
+        database: databaseUrl ? undefined : database,
+        synchronize: false,
+        ...(shouldUseSsl ? { ssl: { rejectUnauthorized: false } } : {}),
+        ...common,
+      },
+);
 
 export default AppDataSource;

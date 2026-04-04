@@ -16,6 +16,20 @@ import { ApolloDriver, ApolloDriverConfig } from '@nestjs/apollo';
           process.env.DB_SSL === 'true' ||
           (databaseUrl && databaseUrl.includes('sslmode=require'))
         );
+
+        const useSqliteFallback =
+          process.env.DB_TYPE === 'sqlite' || (!databaseUrl && !process.env.DB_HOST);
+
+        if (useSqliteFallback) {
+          return {
+            type: 'sqlite',
+            database: process.env.SQLITE_DB || 'todo.sqlite',
+            entities: [__dirname + '/**/*.entity{.ts,.js}'],
+            migrations: [__dirname + '/migrations/*{.ts,.js}'],
+            synchronize: true,
+          } as any;
+        }
+
         const base: any = {
           type: 'postgres',
           url: databaseUrl ?? undefined,
