@@ -1,3 +1,32 @@
+# Node modules
+node_modules/
+**/node_modules/
+
+# Service-specific node_modules (ensure nested modules are ignored)
+services/notifications/node_modules/
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.*.local
+.env.local
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS files
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
 # compiled output
 /dist
 /node_modules
