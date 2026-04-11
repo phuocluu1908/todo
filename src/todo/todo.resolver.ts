@@ -40,7 +40,7 @@ export class TodoResolver {
   async deleteTodo(
     @Args('id', { type: () => Int }) id: number,
   ): Promise<boolean> {
-    await this.todoService.deleteTodo(id).toPromise();
+    await this.todoService.deleteTodo(id);
     return true;
   }
 }

@@ -118,18 +118,18 @@ export class TodoController {
   }
 
   @Delete(':id')
-  deleteTodo(@Param('id') id: number): Observable<DeleteResult> {
+  async deleteTodo(@Param('id') id: number) {
     return this.todoService.deleteTodo(Number(id));
   }
 
   @Delete(':id/soft')
-  softDeleteTodo(@Param('id') id: string) {
+  async softDeleteTodo(@Param('id') id: string) {
     return this.todoService.softDeleteTodo(Number(id));
   }
 
   // Restore endpoint
   @Patch(':id/restore')
-  restoreTodo(@Param('id') id: string) {
+  async restoreTodo(@Param('id') id: string) {
     return this.todoService.restoreTodo(Number(id));
   }
 

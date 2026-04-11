@@ -186,6 +186,19 @@ export class TodoService {
     });
     const savedTodo = await this.todoRepo.save(newTodo);
     await this.logActivity(user, savedTodo, 'created');
+    // Fire-and-forget audit publish
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { createAndPublish } = require('../../../../libs/audit/src/producer');
+      createAndPublish('todo.created', { todoId: savedTodo.id, userId: user.id, title: savedTodo.title }).catch((err: any) => {
+        // do not block on audit failures
+        // eslint-disable-next-line no-console
+        console.error('audit publish failed', err && err.message ? err.message : err);
+      });
+    } catch (e) {
+      // libs may not be available in container build/runtime — ignore
+    }
+
     return savedTodo;
   }
 
@@ -242,7 +255,21 @@ export class TodoService {
       }
     }
 
-    return this.todoRepo.save(todo);
+    const updated = await this.todoRepo.save(todo);
+
+    // Fire-and-forget audit publish
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { createAndPublish } = require('../../../../libs/audit/src/producer');
+      createAndPublish('todo.updated', { todoId: updated.id, changes: updateDto }).catch((err: any) => {
+        // eslint-disable-next-line no-console
+        console.error('audit publish failed', err && err.message ? err.message : err);
+      });
+    } catch (e) {
+      // ignore
+    }
+
+    return updated;
   }
 
   // Find todos due within the next X minutes
@@ -259,23 +286,56 @@ export class TodoService {
   }
 
   // Delete a todo
-  deleteTodo(id: number): Observable<DeleteResult> {
-    return from(
-      this.todoRepo.findOne({ where: { id } }).then((todo) => {
-        if (!todo) throw new NotFoundException(`Todo with id ${id} not found`);
-        return this.todoRepo.delete(id);
-      }),
-    );
+  async deleteTodo(id: number): Promise<DeleteResult> {
+    const todo = await this.todoRepo.findOne({ where: { id } });
+    if (!todo) throw new NotFoundException(`Todo with id ${id} not found`);
+    const res = await this.todoRepo.delete(id);
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { createAndPublish } = require('../../../../libs/audit/src/producer');
+      createAndPublish('todo.deleted', { todoId: id, userId: todo.user?.id ?? null }).catch((err: any) => {
+        // eslint-disable-next-line no-console
+        console.error('audit publish failed', err && err.message ? err.message : err);
+      });
+    } catch (e) {
+      // ignore
+    }
+
+    return res;
   }
 
   // Soft delete a todo
-  softDeleteTodo(id: number): Observable<DeleteResult> {
-    return from(this.todoRepo.softDelete(id));
+  async softDeleteTodo(id: number): Promise<DeleteResult> {
+    const todo = await this.todoRepo.findOne({ where: { id }, relations: ['user'] });
+    const res = await this.todoRepo.softDelete(id);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { createAndPublish } = require('../../../../libs/audit/src/producer');
+      createAndPublish('todo.soft_deleted', { todoId: id, userId: todo?.user?.id ?? null }).catch((err: any) => {
+        // eslint-disable-next-line no-console
+        console.error('audit publish failed', err && err.message ? err.message : err);
+      });
+    } catch (e) {
+      // ignore
+    }
+    return res;
   }
 
   // Restore a soft-deleted todo
-  restoreTodo(id: number): Observable<any> {
-    return from(this.todoRepo.restore(id));
+  async restoreTodo(id: number): Promise<any> {
+    const res = await this.todoRepo.restore(id);
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { createAndPublish } = require('../../../../libs/audit/src/producer');
+      createAndPublish('todo.restored', { todoId: id }).catch((err: any) => {
+        // eslint-disable-next-line no-console
+        console.error('audit publish failed', err && err.message ? err.message : err);
+      });
+    } catch (e) {
+      // ignore
+    }
+    return res;
   }
 
   private async logActivity(
