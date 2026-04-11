@@ -18,6 +18,7 @@ const shouldUseSsl = !!(
 // Allow a lightweight sqlite fallback for local dev when no Postgres config is provided
 const useSqliteFallback =
   process.env.DB_TYPE === 'sqlite' || (!databaseUrl && !process.env.DB_HOST);
+const useMysql = process.env.DB_TYPE === 'mysql' || Number(process.env.DB_PORT) === 3306;
 
 const common = {
   entities: [path.join(__dirname, '/**/*.entity{.ts,.js}')],
@@ -30,6 +31,17 @@ const AppDataSource = new DataSource(
         type: 'sqlite',
         database: process.env.SQLITE_DB || 'todo.sqlite',
         synchronize: true,
+        ...common,
+      }
+    : useMysql
+    ? {
+        type: 'mysql',
+        host: host,
+        port: Number(process.env.DB_PORT ?? 3306),
+        username: username,
+        password: password,
+        database: database,
+        synchronize: false,
         ...common,
       }
     : {

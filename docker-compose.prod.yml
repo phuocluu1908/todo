@@ -2,18 +2,19 @@ version: '3.8'
 
 services:
   db:
-    image: mysql:8.0
-    container_name: user-mysql-prod
+    image: postgres:14
+    container_name: user-postgres-prod
     restart: unless-stopped
     environment:
-      - MYSQL_ROOT_PASSWORD=${DB_ROOT_PASSWORD:-root}
-      - MYSQL_DATABASE=${DB_NAME:-todo_db}
+      - POSTGRES_PASSWORD=${DB_ROOT_PASSWORD:-root}
+      - POSTGRES_DB=${DB_NAME:-todo_db}
+      - POSTGRES_USER=${DB_USER:-postgres}
     volumes:
-      - db_data:/var/lib/mysql
+      - postgres_data:/var/lib/postgresql/data
     networks:
       - app-network
     healthcheck:
-      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      test: ["CMD", "pg_isready", "-U", "${DB_USER:-postgres}"]
       interval: 10s
       timeout: 5s
       retries: 10
@@ -28,15 +29,6 @@ services:
         condition: service_healthy
     ports:
       - "3000:3000"
-    networks:
-      - app-network
-
-  redis:
-    image: redis:7-alpine
-    container_name: todo-redis-prod
-    restart: unless-stopped
-    ports:
-      - "6379:6379"
     networks:
       - app-network
 
@@ -66,21 +58,31 @@ services:
     networks:
       - app-network
 
+  redis:
+    image: redis:7-alpine
+    container_name: todo-redis-prod
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    networks:
+      - app-network
+
   zookeeper:
-    image: bitnami/zookeeper:3
+    image: confluentinc/cp-zookeeper:7.4.0
     environment:
-      - ALLOW_ANONYMOUS_LOGIN=yes
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
     networks:
       - app-network
 
   kafka:
-    image: bitnami/kafka:3
+    image: confluentinc/cp-kafka:7.4.0
     environment:
-      - KAFKA_BROKER_ID=1
-      - KAFKA_ZOOKEEPER_CONNECT=zookeeper:2181
-      - KAFKA_LISTENERS=PLAINTEXT://:9092
-      - KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://kafka:9092
-      - ALLOW_PLAINTEXT_LISTENER=yes
+      KAFKA_BROKER_ID: 1
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
     ports:
       - "9092:9092"
     depends_on:
@@ -103,7 +105,7 @@ services:
       - app-network
 
 volumes:
-  db_data:
+  postgres_data:
 
 networks:
   app-network:

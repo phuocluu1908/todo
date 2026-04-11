@@ -4,8 +4,8 @@ import Redis from 'ioredis';
 @Injectable()
 export class EventsService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(EventsService.name);
-  private pub: Redis.Redis;
-  private sub: Redis.Redis;
+  private pub: any;
+  private sub: any;
   private channel: string = process.env.EVENTS_CHANNEL || 'todo-updates';
 
   onModuleInit() {
