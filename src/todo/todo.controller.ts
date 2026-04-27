@@ -112,25 +112,29 @@ export class TodoController {
   }
 
   @Patch(':id')
+  @UseGuards(TodoOwnerGuard)
   @UsePipes(new ValidationPipe({ whitelist: true }))
-  async updateTodo(@Param('id') id: number, @Body() updateDto: UpdateTodoDto) {
-    return this.todoService.updateTodo(Number(id), updateDto);
+  async updateTodo(@Param('id') id: number, @Body() updateDto: UpdateTodoDto, @Request() req) {
+    return this.todoService.updateTodo(Number(id), updateDto, req.user.userId);
   }
 
   @Delete(':id')
-  async deleteTodo(@Param('id') id: number) {
-    return this.todoService.deleteTodo(Number(id));
+  @UseGuards(TodoOwnerGuard)
+  async deleteTodo(@Param('id') id: number, @Request() req) {
+    return this.todoService.deleteTodo(Number(id), req.user.userId);
   }
 
   @Delete(':id/soft')
-  async softDeleteTodo(@Param('id') id: string) {
-    return this.todoService.softDeleteTodo(Number(id));
+  @UseGuards(TodoOwnerGuard)
+  async softDeleteTodo(@Param('id') id: string, @Request() req) {
+    return this.todoService.softDeleteTodo(Number(id), req.user.userId);
   }
 
   // Restore endpoint
   @Patch(':id/restore')
-  async restoreTodo(@Param('id') id: string) {
-    return this.todoService.restoreTodo(Number(id));
+  @UseGuards(TodoOwnerGuard)
+  async restoreTodo(@Param('id') id: string, @Request() req) {
+    return this.todoService.restoreTodo(Number(id), req.user.userId);
   }
 
 }

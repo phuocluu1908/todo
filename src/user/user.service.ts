@@ -5,7 +5,11 @@ import { User } from './user.entity';
 import * as bcrypt from 'bcryptjs';
 import { UpdateProfileDto } from './dto/update-profile.dto';
 import { ChangePasswordDto } from './dto/change-password.dto';
-import { BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 
 @Injectable()
 export class UserService {
@@ -15,6 +19,10 @@ export class UserService {
 
   async findByUsername(username: string): Promise<User | null> {
     return this.userRepo.findOne({ where: { username } });
+  }
+
+  async findById(id: number): Promise<User | null> {
+    return this.userRepo.findOne({ where: { id } });
   }
 
   async getAllUser() {
@@ -28,6 +36,20 @@ export class UserService {
     avatar?: string,
     roles?: string[],
   ): Promise<User> {
+    const existingByUsername = await this.userRepo.findOne({
+      where: { username },
+    });
+    if (existingByUsername) {
+      throw new ConflictException('Username already exists');
+    }
+
+    const existingByEmail = await this.userRepo.findOne({
+      where: { email },
+    });
+    if (existingByEmail) {
+      throw new ConflictException('Email already exists');
+    }
+
     const hashed = await bcrypt.hash(password, 10);
     const user = this.userRepo.create({
       username,
@@ -51,7 +73,7 @@ export class UserService {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');
     // Do not return password
-    const { password, ...profile } = user;
+    const { password, refreshToken, ...profile } = user;
     return profile;
   }
 
@@ -62,7 +84,7 @@ export class UserService {
     if (dto.email) user.email = dto.email;
     if (dto.avatar) user.avatar = dto.avatar;
     await this.userRepo.save(user);
-    const { password, ...profile } = user;
+    const { password, refreshToken, ...profile } = user;
     return profile;
   }
 
@@ -82,5 +104,19 @@ export class UserService {
     if (userToRemove) {
       await this.userRepo.remove(userToRemove);
     }
+  }
+
+  async saveRefreshToken(userId: number, refreshToken: string) {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    user.refreshToken = refreshToken;
+    await this.userRepo.save(user);
+  }
+
+  async clearRefreshToken(userId: number) {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+    user.refreshToken = null as any;
+    await this.userRepo.save(user);
   }
 }

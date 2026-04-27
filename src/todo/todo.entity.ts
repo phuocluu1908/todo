@@ -20,7 +20,7 @@ export class Todo {
   @Column({ default: false })
   completed: boolean;
 
-  @Column({ type: process.env.DB_TYPE === 'sqlite' ? 'datetime' : (process.env.DB_TYPE === 'postgres' ? 'timestamptz' : 'timestamp'), nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
   dueDate: Date | null;
 
   @Column({ type: 'varchar', default: 'medium' })
@@ -35,15 +35,15 @@ export class Todo {
   @Column({ type: 'varchar', nullable: true })
   recurrence: 'daily' | 'weekly' | 'monthly' | null;
 
-  @Column({ type: process.env.DB_TYPE === 'sqlite' ? 'datetime' : (process.env.DB_TYPE === 'postgres' ? 'timestamptz' : 'timestamp'), nullable: true })
+  @Column({ type: 'timestamp', nullable: true })
   recurrenceEnd: Date | null;
 
-  @CreateDateColumn()
+  @CreateDateColumn({ type: 'timestamp' })
   createdAt: Date;
 
-  @UpdateDateColumn()
+  @UpdateDateColumn({ type: 'timestamp' })
   updatedAt: Date;
 
-  @DeleteDateColumn()
+  @DeleteDateColumn({ type: 'timestamp' })
   deletedAt?: Date;
 }

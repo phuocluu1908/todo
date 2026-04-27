@@ -110,6 +110,115 @@ export class AuditService implements OnModuleInit, OnModuleDestroy {
     this.logger.log(`Published audit event=${event}`);
   }
 
+  async queryEvents(filters: {
+    event?: string;
+    userId?: number;
+    limit?: number;
+    offset?: number;
+    fromDate?: string;
+    toDate?: string;
+  }) {
+    if (!this.db) {
+      return { ok: false, error: 'Database not initialized' };
+    }
+
+    try {
+      let query = 'SELECT * FROM audits WHERE 1=1';
+      const params: any[] = [];
+
+      if (filters.event) {
+        query += ' AND event = ?';
+        params.push(filters.event);
+      }
+
+      if (filters.fromDate) {
+        const fromTs = new Date(filters.fromDate).getTime();
+        query += ' AND ts >= ?';
+        params.push(fromTs);
+      }
+
+      if (filters.toDate) {
+        const toTs = new Date(filters.toDate).getTime();
+        query += ' AND ts <= ?';
+        params.push(toTs);
+      }
+
+      query += ' ORDER BY ts DESC LIMIT ? OFFSET ?';
+      params.push(filters.limit || 50, filters.offset || 0);
+
+      const events = this.db.prepare(query).all(...params);
+      const events_parsed = events.map((e: any) => ({
+        ...e,
+        payload: e.payload ? JSON.parse(e.payload) : null,
+      }));
+
+      return { ok: true, events: events_parsed, count: events.length };
+    } catch (e) {
+      this.logger.error('Query error', e instanceof Error ? e.stack : String(e));
+      return { ok: false, error: 'Query failed' };
+    }
+  }
+
+  async getUserEvents(limit: number = 50, offset: number = 0) {
+    if (!this.db) {
+      return { ok: false, error: 'Database not initialized' };
+    }
+
+    try {
+      const query = 'SELECT * FROM audits ORDER BY ts DESC LIMIT ? OFFSET ?';
+      const events = this.db.prepare(query).all(limit, offset);
+      const events_parsed = events.map((e: any) => ({
+        ...e,
+        payload: e.payload ? JSON.parse(e.payload) : null,
+      }));
+
+      return { ok: true, events: events_parsed };
+    } catch (e) {
+      this.logger.error('Query error', e instanceof Error ? e.stack : String(e));
+      return { ok: false, error: 'Query failed' };
+    }
+  }
+
+  async getStats() {
+    if (!this.db) {
+      return { ok: false, error: 'Database not initialized' };
+    }
+
+    try {
+      const total = this.db.prepare('SELECT COUNT(*) as count FROM audits').get() as any;
+      const byEvent = this.db.prepare('SELECT event, COUNT(*) as count FROM audits GROUP BY event').all();
+      const recentCount = this.db.prepare(
+        'SELECT COUNT(*) as count FROM audits WHERE ts >= ?',
+      ).get(Date.now() - 24 * 60 * 60 * 1000) as any;
+
+      return {
+        ok: true,
+        total: total.count,
+        recentCount: recentCount.count,
+        byEvent,
+      };
+    } catch (e) {
+      this.logger.error('Stats error', e instanceof Error ? e.stack : String(e));
+      return { ok: false, error: 'Stats failed' };
+    }
+  }
+
+  async cleanupOldEvents(daysOld: number = 90): Promise<any> {
+    if (!this.db) {
+      return { ok: false, error: 'Database not initialized' };
+    }
+
+    try {
+      const cutoffTs = Date.now() - daysOld * 24 * 60 * 60 * 1000;
+      const result = this.db.prepare('DELETE FROM audits WHERE ts < ?').run(cutoffTs);
+      this.logger.log(`Cleaned up ${result.changes} old audit events`);
+      return { ok: true, deleted: result.changes };
+    } catch (e) {
+      this.logger.error('Cleanup error', e instanceof Error ? e.stack : String(e));
+      return { ok: false, error: 'Cleanup failed' };
+    }
+  }
+
   // extend with actual handlers
   private async handleMessage(payload: any) {
     this.logger.debug(`Handle message: ${JSON.stringify(payload)}`);
@@ -140,3 +249,4 @@ export class AuditService implements OnModuleInit, OnModuleDestroy {
     }
   }
 }
+

@@ -32,6 +32,15 @@ export class User {
   @Column()
   password: string; // Hashed password
 
+  @Column({ nullable: true })
+  refreshToken: string; // <-- New field for refresh token
+
+  @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+  createdAt: Date;
+
+  @Column({ type: 'timestamp', default: () => 'CURRENT_TIMESTAMP' })
+  updatedAt: Date;
+
   @OneToMany(() => Todo, (todo) => todo.user)
   todos: Todo[];
 }

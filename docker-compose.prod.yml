@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   db:
     image: postgres:14
@@ -24,6 +22,8 @@ services:
     image: todo-app:latest
     restart: unless-stopped
     env_file: .env
+    environment:
+      - JWT_SECRET=${JWT_SECRET:-replace-with-secure-secret}
     depends_on:
       db:
         condition: service_healthy
@@ -39,6 +39,9 @@ services:
     image: todo-auth:latest
     restart: unless-stopped
     env_file: services/auth/.env.example
+    environment:
+      - JWT_SECRET=${JWT_SECRET:-replace-with-secure-secret}
+      - APP_SERVICE_URL=http://app:3000
     ports:
       - "3001:3001"
     networks:

@@ -203,9 +203,14 @@ export class TodoService {
   }
 
   // Update a todo
-  async updateTodo(id: number, updateDto: UpdateTodoDto): Promise<Todo> {
-    const todo = await this.todoRepo.findOne({ where: { id } });
+  async updateTodo(id: number, updateDto: UpdateTodoDto, userId?: number): Promise<Todo> {
+    const todo = await this.todoRepo.findOne({ where: { id }, relations: ['user'] });
     if (!todo) throw new NotFoundException(`Todo with id ${id} not found`);
+    
+    // Verify ownership if userId is provided
+    if (userId && todo.user.id !== userId) {
+      throw new NotFoundException(`Todo with id ${id} not found`);
+    }
 
     if (updateDto.title !== undefined) todo.title = updateDto.title;
     if (updateDto.completed !== undefined) todo.completed = updateDto.completed;
@@ -286,9 +291,15 @@ export class TodoService {
   }
 
   // Delete a todo
-  async deleteTodo(id: number): Promise<DeleteResult> {
-    const todo = await this.todoRepo.findOne({ where: { id } });
+  async deleteTodo(id: number, userId?: number): Promise<DeleteResult> {
+    const todo = await this.todoRepo.findOne({ where: { id }, relations: ['user'] });
     if (!todo) throw new NotFoundException(`Todo with id ${id} not found`);
+    
+    // Verify ownership if userId is provided
+    if (userId && todo.user.id !== userId) {
+      throw new NotFoundException(`Todo with id ${id} not found`);
+    }
+    
     const res = await this.todoRepo.delete(id);
 
     try {
@@ -306,8 +317,15 @@ export class TodoService {
   }
 
   // Soft delete a todo
-  async softDeleteTodo(id: number): Promise<DeleteResult> {
+  async softDeleteTodo(id: number, userId?: number): Promise<DeleteResult> {
     const todo = await this.todoRepo.findOne({ where: { id }, relations: ['user'] });
+    if (!todo) throw new NotFoundException(`Todo with id ${id} not found`);
+    
+    // Verify ownership if userId is provided
+    if (userId && todo.user.id !== userId) {
+      throw new NotFoundException(`Todo with id ${id} not found`);
+    }
+    
     const res = await this.todoRepo.softDelete(id);
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -323,7 +341,15 @@ export class TodoService {
   }
 
   // Restore a soft-deleted todo
-  async restoreTodo(id: number): Promise<any> {
+  async restoreTodo(id: number, userId?: number): Promise<any> {
+    const todo = await this.todoRepo.findOne({ where: { id }, relations: ['user'] });
+    if (!todo) throw new NotFoundException(`Todo with id ${id} not found`);
+    
+    // Verify ownership if userId is provided
+    if (userId && todo.user.id !== userId) {
+      throw new NotFoundException(`Todo with id ${id} not found`);
+    }
+    
     const res = await this.todoRepo.restore(id);
     try {
       // eslint-disable-next-line @typescript-eslint/no-var-requires
