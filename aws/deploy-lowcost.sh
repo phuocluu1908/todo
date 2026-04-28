@@ -107,14 +107,14 @@ cat > /tmp/ssm-params-deploy-lowcost.json <<JSON
     "AUTH_IMAGE_URI=${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${STACK_NAME}-auth:${IMAGE_TAG}",
     "aws ecr get-login-password --region ${REGION} | docker login --username AWS --password-stdin ${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com",
     "docker network create todo-net || true",
-    "docker pull \"$IMAGE_URI\"",
-    "docker pull \"$AUTH_IMAGE_URI\"",
+    "docker pull \"\$IMAGE_URI\"",
+    "docker pull \"\$AUTH_IMAGE_URI\"",
     "docker rm -f todo-db || true",
-    "docker run -d --name todo-db --restart unless-stopped --network todo-net -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=\"$DB_PASSWORD\" -e POSTGRES_DB=todo_db -v /opt/todo/data/postgres:/var/lib/postgresql/data postgres:14",
+    "docker run -d --name todo-db --restart unless-stopped --network todo-net -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=\"\$DB_PASSWORD\" -e POSTGRES_DB=todo_db -v /opt/todo/data/postgres:/var/lib/postgresql/data postgres:14",
     "docker rm -f todo-auth || true",
-    "docker run -d --name todo-auth --restart unless-stopped --network todo-net -p 3001:3001 -e PORT=3001 -e JWT_SECRET=\"$JWT_SECRET\" -e APP_SERVICE_URL=http://todo-app:3000 \"$AUTH_IMAGE_URI\"",
+    "docker run -d --name todo-auth --restart unless-stopped --network todo-net -p 3001:3001 -e PORT=3001 -e JWT_SECRET=\"\$JWT_SECRET\" -e DB_HOST=todo-db -e DB_PORT=5432 -e DB_USER=postgres -e DB_PASSWORD=\"\$DB_PASSWORD\" -e DB_NAME=todo_db -e DB_SSL=false \"\$AUTH_IMAGE_URI\"",
     "docker rm -f todo-app || true",
-    "docker run -d --name todo-app --restart unless-stopped --network todo-net -p 80:3000 -e NODE_ENV=production -e PORT=3000 -e DB_TYPE=postgres -e DB_HOST=todo-db -e DB_PORT=5432 -e DB_USER=postgres -e DB_PASSWORD=\"$DB_PASSWORD\" -e DB_NAME=todo_db -e DB_SSL=false -e JWT_SECRET=\"$JWT_SECRET\" -v /opt/todo/data:/app/data \"$IMAGE_URI\" node dist/src/main",
+    "docker run -d --name todo-app --restart unless-stopped --network todo-net -p 80:3000 -e NODE_ENV=production -e PORT=3000 -e DB_TYPE=postgres -e DB_HOST=todo-db -e DB_PORT=5432 -e DB_USER=postgres -e DB_PASSWORD=\"\$DB_PASSWORD\" -e DB_NAME=todo_db -e DB_SSL=false -e JWT_SECRET=\"\$JWT_SECRET\" -v /opt/todo/data:/app/data \"\$IMAGE_URI\" node dist/src/main",
     "docker image prune -f"
   ]
 }

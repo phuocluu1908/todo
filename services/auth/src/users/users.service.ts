@@ -1,60 +1,47 @@
-import { Injectable } from '@nestjs/common';
-
-interface User {
-  id: number;
-  appUserId?: number;
-  username: string;
-  email?: string;
-  password: string;
-  avatar?: string;
-}
+import { Injectable, ConflictException } from '@nestjs/common';
+import { InjectRepository } from '@nestjs/typeorm';
+import { Repository } from 'typeorm';
+import { User } from './user.entity';
+import * as bcrypt from 'bcryptjs';
 
 @Injectable()
 export class UsersService {
-  // Minimal in-memory users store for scaffold/demo purposes
-  private users: User[] = [
-    {
-      id: 1,
-      appUserId: 1,
-      username: 'alice',
-      email: 'alice@example.com',
-      password: 'password',
-    },
-    {
-      id: 2,
-      appUserId: 2,
-      username: 'bob',
-      email: 'bob@example.com',
-      password: 'password',
-    },
-  ];
+  constructor(
+    @InjectRepository(User) private readonly userRepo: Repository<User>,
+  ) {}
 
-  private nextId = 3;
-
-  async findByUsername(username: string) {
-    return this.users.find((u) => u.username === username) || null;
+  async findByUsername(username: string): Promise<User | null> {
+    return this.userRepo.findOne({ where: { username } });
   }
 
-  async findById(id: number) {
-    return this.users.find((u) => u.id === id) || null;
+  async findById(id: number): Promise<User | null> {
+    return this.userRepo.findOne({ where: { id } });
   }
 
-  async createUser(userData: Partial<User>) {
-    const user: User = {
-      id: this.nextId++,
-      appUserId: userData.appUserId,
-      username: userData.username || '',
-      email: userData.email || '',
-      password: userData.password || '',
+  async createUser(userData: {
+    username: string;
+    email: string;
+    password: string;
+    avatar?: string;
+  }): Promise<User> {
+    const existingByUsername = await this.userRepo.findOne({ where: { username: userData.username } });
+    if (existingByUsername) throw new ConflictException('Username already exists');
+
+    const existingByEmail = await this.userRepo.findOne({ where: { email: userData.email } });
+    if (existingByEmail) throw new ConflictException('Email already exists');
+
+    const hashed = await bcrypt.hash(userData.password, 10);
+    const user = this.userRepo.create({
+      username: userData.username,
+      email: userData.email,
+      password: hashed,
       avatar: userData.avatar,
-    };
-
-    this.users.push(user);
-    const { password, ...result } = user;
-    return result;
+    });
+    return this.userRepo.save(user);
   }
 
-  async getAllUsers() {
-    return this.users.map(({ password, ...user }) => user);
+  async validatePassword(plain: string, hashed: string): Promise<boolean> {
+    return bcrypt.compare(plain, hashed);
   }
 }
+
