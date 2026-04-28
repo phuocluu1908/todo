@@ -104,6 +104,12 @@ export class AuditService implements OnModuleInit, OnModuleDestroy {
     }
   }
 
+  async saveEvent(event: string, payload: any) {
+    const message = { event, payload, ts: Date.now() };
+    await this.handleMessage(message);
+    this.logger.log(`Saved audit event=${event}`);
+  }
+
   async publish(event: string, payload: any) {
     const message = { event, payload, ts: Date.now() };
     await this.producer.send({ topic: this.topic, messages: [{ value: JSON.stringify(message) }] });
@@ -220,7 +226,7 @@ export class AuditService implements OnModuleInit, OnModuleDestroy {
   }
 
   // extend with actual handlers
-  private async handleMessage(payload: any) {
+  async handleMessage(payload: any) {
     this.logger.debug(`Handle message: ${JSON.stringify(payload)}`);
     try {
       if (!this.validateFn) {

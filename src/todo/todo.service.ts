@@ -1,4 +1,4 @@
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import {
   DeleteResult,
@@ -6,6 +6,8 @@ import {
   Between,
   FindOptionsWhere,
   Like,
+  IsNull,
+  Not,
 } from 'typeorm';
 import { Todo } from './todo.entity';
 import { User } from '../user/user.entity';
@@ -13,9 +15,12 @@ import { Observable, from } from 'rxjs';
 import { CreateTodoDto } from './dto/create-todo.dto';
 import { UpdateTodoDto } from './dto/update-todo.dto';
 import { ActivityLog } from './activity-log.entity';
+import axios from 'axios';
 
 @Injectable()
 export class TodoService {
+  private readonly logger = new Logger(TodoService.name);
+
   constructor(
     @InjectRepository(Todo) private readonly todoRepo: Repository<Todo>,
     @InjectRepository(User) private readonly userRepo: Repository<User>,
@@ -186,18 +191,11 @@ export class TodoService {
     });
     const savedTodo = await this.todoRepo.save(newTodo);
     await this.logActivity(user, savedTodo, 'created');
-    // Fire-and-forget audit publish
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { createAndPublish } = require('../../../../libs/audit/src/producer');
-      createAndPublish('todo.created', { todoId: savedTodo.id, userId: user.id, title: savedTodo.title }).catch((err: any) => {
-        // do not block on audit failures
-        // eslint-disable-next-line no-console
-        console.error('audit publish failed', err && err.message ? err.message : err);
-      });
-    } catch (e) {
-      // libs may not be available in container build/runtime — ignore
-    }
+    this.publishMutationEvent('todo.created', {
+      todoId: savedTodo.id,
+      userId: user.id,
+      title: savedTodo.title,
+    });
 
     return savedTodo;
   }
@@ -261,18 +259,11 @@ export class TodoService {
     }
 
     const updated = await this.todoRepo.save(todo);
-
-    // Fire-and-forget audit publish
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { createAndPublish } = require('../../../../libs/audit/src/producer');
-      createAndPublish('todo.updated', { todoId: updated.id, changes: updateDto }).catch((err: any) => {
-        // eslint-disable-next-line no-console
-        console.error('audit publish failed', err && err.message ? err.message : err);
-      });
-    } catch (e) {
-      // ignore
-    }
+    this.publishMutationEvent('todo.updated', {
+      todoId: updated.id,
+      userId: updated.user?.id ?? userId ?? null,
+      changes: updateDto,
+    });
 
     return updated;
   }
@@ -302,16 +293,10 @@ export class TodoService {
     
     const res = await this.todoRepo.delete(id);
 
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { createAndPublish } = require('../../../../libs/audit/src/producer');
-      createAndPublish('todo.deleted', { todoId: id, userId: todo.user?.id ?? null }).catch((err: any) => {
-        // eslint-disable-next-line no-console
-        console.error('audit publish failed', err && err.message ? err.message : err);
-      });
-    } catch (e) {
-      // ignore
-    }
+    this.publishMutationEvent('todo.deleted', {
+      todoId: id,
+      userId: todo.user?.id ?? null,
+    });
 
     return res;
   }
@@ -327,22 +312,32 @@ export class TodoService {
     }
     
     const res = await this.todoRepo.softDelete(id);
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { createAndPublish } = require('../../../../libs/audit/src/producer');
-      createAndPublish('todo.soft_deleted', { todoId: id, userId: todo?.user?.id ?? null }).catch((err: any) => {
-        // eslint-disable-next-line no-console
-        console.error('audit publish failed', err && err.message ? err.message : err);
-      });
-    } catch (e) {
-      // ignore
-    }
+    this.publishMutationEvent('todo.soft_deleted', {
+      todoId: id,
+      userId: todo?.user?.id ?? null,
+    });
+
     return res;
+  }
+
+  async getTrash(userId: number): Promise<Todo[]> {
+    return this.todoRepo.find({
+      where: {
+        user: { id: userId },
+        deletedAt: Not(IsNull()),
+      },
+      withDeleted: true,
+      order: { updatedAt: 'DESC' },
+    });
   }
 
   // Restore a soft-deleted todo
   async restoreTodo(id: number, userId?: number): Promise<any> {
-    const todo = await this.todoRepo.findOne({ where: { id }, relations: ['user'] });
+    const todo = await this.todoRepo.findOne({
+      where: { id },
+      relations: ['user'],
+      withDeleted: true,
+    });
     if (!todo) throw new NotFoundException(`Todo with id ${id} not found`);
     
     // Verify ownership if userId is provided
@@ -351,17 +346,88 @@ export class TodoService {
     }
     
     const res = await this.todoRepo.restore(id);
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { createAndPublish } = require('../../../../libs/audit/src/producer');
-      createAndPublish('todo.restored', { todoId: id }).catch((err: any) => {
-        // eslint-disable-next-line no-console
-        console.error('audit publish failed', err && err.message ? err.message : err);
-      });
-    } catch (e) {
-      // ignore
-    }
+    this.publishMutationEvent('todo.restored', {
+      todoId: id,
+      userId: todo.user?.id ?? userId ?? null,
+    });
+
     return res;
+  }
+
+  async permanentDeleteTodo(id: number, userId?: number): Promise<DeleteResult> {
+    const todo = await this.todoRepo.findOne({
+      where: { id },
+      relations: ['user'],
+      withDeleted: true,
+    });
+    if (!todo) throw new NotFoundException(`Todo with id ${id} not found`);
+
+    if (userId && todo.user.id !== userId) {
+      throw new NotFoundException(`Todo with id ${id} not found`);
+    }
+
+    const res = await this.todoRepo.delete(id);
+
+    this.publishMutationEvent('todo.deleted.permanent', {
+      todoId: id,
+      userId: todo.user?.id ?? null,
+    });
+
+    return res;
+  }
+
+  private publishMutationEvent(event: string, payload: Record<string, unknown>) {
+    this.publishAuditEvent(event, payload);
+    void this.publishToEventsService(event, payload);
+  }
+
+  private publishAuditEvent(event: string, payload: Record<string, unknown>) {
+    void this.publishToAuditService(event, payload);
+  }
+
+  private async publishToAuditService(
+    event: string,
+    payload: Record<string, unknown>,
+  ) {
+    const auditServiceUrl =
+      process.env.AUDIT_SERVICE_URL || 'http://localhost:3003';
+    try {
+      await axios.post(
+        `${auditServiceUrl}/audit/publish`,
+        { event, payload },
+        {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 2000,
+        },
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(`audit publish failed for ${event}: ${message}`);
+    }
+  }
+
+  private async publishToEventsService(
+    event: string,
+    payload: Record<string, unknown>,
+  ) {
+    const eventsServiceUrl =
+      process.env.EVENTS_SERVICE_URL || 'http://localhost:3002';
+
+    try {
+      await axios.post(
+        `${eventsServiceUrl}/events/publish`,
+        { event, payload },
+        {
+          headers: { 'Content-Type': 'application/json' },
+          timeout: 2000,
+        },
+      );
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      this.logger.warn(
+        `events publish failed for ${event}: ${message}`,
+      );
+    }
   }
 
   private async logActivity(

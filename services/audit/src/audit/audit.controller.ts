@@ -1,8 +1,13 @@
 import { Body, Controller, Get, Post, Query, Logger } from '@nestjs/common';
+import { IsString, IsNotEmpty, Allow } from 'class-validator';
 import { AuditService } from './audit.service';
 
 class PublishDto {
+  @IsString()
+  @IsNotEmpty()
   event: string;
+
+  @Allow()
   payload: any;
 }
 
@@ -24,7 +29,7 @@ export class AuditController {
       this.logger.warn('Missing event in body', body);
       return { ok: false, error: 'missing event' };
     }
-    await this.audit.publish(body.event, body.payload);
+    await this.audit.saveEvent(body.event, body.payload);
     return { ok: true };
   }
 

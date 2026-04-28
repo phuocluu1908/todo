@@ -76,4 +76,14 @@ export class UserController {
   async deleteUser(@Param('id') id) {
     return this.userService.deleteUser(id);
   }
+
+  @SetMetadata('roles', ['admin'])
+  @UseGuards(AuthGuard('jwt'), RolesGuard)
+  @Patch(':id/roles')
+  async updateUserRoles(
+    @Param('id') id: string,
+    @Body('roles') roles: string[] = [],
+  ) {
+    return this.userService.updateRoles(Number(id), roles);
+  }
 }

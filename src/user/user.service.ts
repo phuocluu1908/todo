@@ -106,6 +106,19 @@ export class UserService {
     }
   }
 
+  async updateRoles(userId: number, roles: string[]) {
+    const user = await this.userRepo.findOne({ where: { id: userId } });
+    if (!user) throw new NotFoundException('User not found');
+
+    user.roles = Array.from(
+      new Set((roles || []).map((role) => (role || '').trim()).filter(Boolean)),
+    );
+
+    await this.userRepo.save(user);
+    const { password, refreshToken, ...rest } = user;
+    return rest;
+  }
+
   async saveRefreshToken(userId: number, refreshToken: string) {
     const user = await this.userRepo.findOne({ where: { id: userId } });
     if (!user) throw new NotFoundException('User not found');

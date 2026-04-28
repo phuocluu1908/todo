@@ -29,7 +29,7 @@ export class TodoOwnerGuard implements CanActivate {
       throw new NotFoundException('Todo not found');
     }
     if (
-      String(todo.user.id) !== user.userId &&
+      String(todo.user.id) !== String(user.userId) &&
       !request?.user?.roles?.includes('admin')
     ) {
       throw new ForbiddenException('You do not have access to this todo');

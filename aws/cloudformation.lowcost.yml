@@ -1,0 +1,253 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Todo App low-cost stack for learning:
+  EC2 + Docker + ECR + SSM, using SQLite inside the app container.
+  No NAT Gateway, no ALB, no RDS.
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: todo-app-lowcost
+    Description: Prefix for resource names.
+
+  JwtSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: JWT secret used by the app.
+
+  ImageTag:
+    Type: String
+    Default: latest
+    Description: Docker image tag in ECR.
+
+  InstanceType:
+    Type: String
+    Default: t3.micro
+    AllowedValues:
+      - t2.micro
+      - t3.micro
+      - t3.small
+
+  SSHCidr:
+    Type: String
+    Default: 0.0.0.0/0
+    Description: CIDR allowed to SSH to the instance (port 22). Restrict in production.
+
+  AmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+    Description: Amazon Linux 2023 AMI via SSM public parameter.
+
+Resources:
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub '${EnvironmentName}'
+      ImageScanningConfiguration:
+        ScanOnPush: true
+
+  ECRRepositoryAuth:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub '${EnvironmentName}-auth'
+      ImageScanningConfiguration:
+        ScanOnPush: true
+
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.20.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-vpc'
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-igw'
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  PublicSubnet:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.20.1.0/24
+      AvailabilityZone: !Sub '${AWS::Region}a'
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-public-subnet'
+
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetRouteAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnet
+      RouteTableId: !Ref PublicRouteTable
+
+  AppSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow web and optional SSH
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 3001
+          ToPort: 3001
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SSHCidr
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-sg'
+
+  EC2Role:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${EnvironmentName}-ec2-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+
+  EC2InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      InstanceProfileName: !Sub '${EnvironmentName}-instance-profile'
+      Roles:
+        - !Ref EC2Role
+
+  AppInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref AmiId
+      InstanceType: !Ref InstanceType
+      IamInstanceProfile: !Ref EC2InstanceProfile
+      SubnetId: !Ref PublicSubnet
+      SecurityGroupIds:
+        - !Ref AppSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-app'
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -euxo pipefail
+
+          dnf update -y
+          dnf install -y docker docker-compose-plugin || dnf install -y docker
+          systemctl enable docker
+          systemctl start docker
+
+          usermod -aG docker ec2-user || true
+
+          mkdir -p /opt/todo/data
+          chown -R ec2-user:ec2-user /opt/todo
+
+          cat > /opt/todo/.env <<EOF
+          AWS_REGION=${AWS::Region}
+          ACCOUNT_ID=${AWS::AccountId}
+          ECR_REPO=${EnvironmentName}
+          IMAGE_TAG=${ImageTag}
+          DB_PASSWORD=$(openssl rand -base64 24 | tr -d '\n')
+          JWT_SECRET=${JwtSecret}
+          EOF
+
+          aws ecr get-login-password --region ${AWS::Region} | docker login --username AWS --password-stdin ${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com || true
+
+          set -a
+          source /opt/todo/.env
+          set +a
+          IMAGE_URI="${!ACCOUNT_ID}.dkr.ecr.${!AWS_REGION}.amazonaws.com/${!ECR_REPO}:${!IMAGE_TAG}"
+
+          docker network create todo-net || true
+
+          docker rm -f todo-db || true
+          docker run -d \
+            --name todo-db \
+            --restart unless-stopped \
+            --network todo-net \
+            -e POSTGRES_USER=postgres \
+            -e POSTGRES_PASSWORD="${!DB_PASSWORD}" \
+            -e POSTGRES_DB=todo_db \
+            -v /opt/todo/data/postgres:/var/lib/postgresql/data \
+            postgres:14 || true
+
+          docker pull "$IMAGE_URI" || true
+          docker rm -f todo-app || true
+          docker run -d \
+            --name todo-app \
+            --restart unless-stopped \
+            --network todo-net \
+            -p 80:3000 \
+            -e NODE_ENV=production \
+            -e PORT=3000 \
+            -e DB_TYPE=postgres \
+            -e DB_HOST=todo-db \
+            -e DB_PORT=5432 \
+            -e DB_USER=postgres \
+            -e DB_PASSWORD="${!DB_PASSWORD}" \
+            -e DB_NAME=todo_db \
+            -e DB_SSL=false \
+            -e JWT_SECRET="${!JWT_SECRET}" \
+            -v /opt/todo/data:/app/data \
+            "$IMAGE_URI" node dist/src/main || true
+
+Outputs:
+  PublicURL:
+    Description: App URL
+    Value: !Sub 'http://${AppInstance.PublicDnsName}'
+
+  SwaggerURL:
+    Description: Swagger docs URL
+    Value: !Sub 'http://${AppInstance.PublicDnsName}/api'
+
+  InstanceId:
+    Description: EC2 instance ID
+    Value: !Ref AppInstance
+
+  ECRRepositoryURI:
+    Description: ECR repository URI
+    Value: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepository}'
+
+  ECRRepositoryAuthURI:
+    Description: ECR repository URI for auth service
+    Value: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepositoryAuth}'
+
+  AuthServiceURL:
+    Description: Auth service URL
+    Value: !Sub 'http://${AppInstance.PublicDnsName}:3001'

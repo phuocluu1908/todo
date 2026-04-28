@@ -1,0 +1,525 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  Todo App – ECS Fargate + RDS PostgreSQL + ALB (ap-southeast-1)
+  Provisions: VPC, subnets, NAT, ALB, ECR, ECS Fargate service, RDS Postgres,
+  Secrets Manager entries, IAM roles, and CloudWatch Logs.
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Parameters
+# ──────────────────────────────────────────────────────────────────────────────
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: todo-app-prod
+    Description: Prefix used for all resource names / log groups.
+
+  DBPassword:
+    Type: String
+    NoEcho: true
+    MinLength: 8
+    Description: Master password for RDS PostgreSQL. Never hard-code – pass via CLI.
+
+  JwtSecret:
+    Type: String
+    NoEcho: true
+    MinLength: 16
+    Description: JWT signing secret for the NestJS app. Never hard-code – pass via CLI.
+
+  ImageTag:
+    Type: String
+    Default: latest
+    Description: Docker image tag pushed to ECR (e.g. latest or a Git SHA).
+
+  AppDesiredCount:
+    Type: Number
+    Default: 1
+    MinValue: 0
+    Description: Number of ECS Fargate tasks to run.
+
+  DBInstanceClass:
+    Type: String
+    Default: db.t3.micro
+    AllowedValues:
+      - db.t3.micro
+      - db.t3.small
+      - db.t3.medium
+
+  TaskCpu:
+    Type: String
+    Default: '512'
+    AllowedValues: ['256', '512', '1024', '2048']
+
+  TaskMemory:
+    Type: String
+    Default: '1024'
+    AllowedValues: ['512', '1024', '2048', '4096']
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Resources
+# ──────────────────────────────────────────────────────────────────────────────
+Resources:
+
+  # ── ECR ─────────────────────────────────────────────────────────────────────
+  ECRRepository:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub '${EnvironmentName}'
+      ImageScanningConfiguration:
+        ScanOnPush: true
+      LifecyclePolicy:
+        LifecyclePolicyText: |
+          {
+            "rules": [
+              {
+                "rulePriority": 1,
+                "description": "Expire untagged images beyond 5",
+                "selection": {
+                  "tagStatus": "untagged",
+                  "countType": "imageCountMoreThan",
+                  "countNumber": 5
+                },
+                "action": { "type": "expire" }
+              }
+            ]
+          }
+
+  # ── Secrets Manager ─────────────────────────────────────────────────────────
+  DBPasswordSecret:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '/${EnvironmentName}/db-password'
+      Description: RDS master password for todo-app
+      SecretString: !Ref DBPassword
+
+  JwtSecretResource:
+    Type: AWS::SecretsManager::Secret
+    Properties:
+      Name: !Sub '/${EnvironmentName}/jwt-secret'
+      Description: JWT signing secret for todo-app
+      SecretString: !Ref JwtSecret
+
+  # ── VPC ─────────────────────────────────────────────────────────────────────
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-vpc'
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-igw'
+
+  VPCGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      VpcId: !Ref VPC
+      InternetGatewayId: !Ref InternetGateway
+
+  # ── Subnets ─────────────────────────────────────────────────────────────────
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: ap-southeast-1a
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-public-a'
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: ap-southeast-1b
+      MapPublicIpOnLaunch: true
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-public-b'
+
+  PrivateSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: ap-southeast-1a
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-private-a'
+
+  PrivateSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref VPC
+      CidrBlock: 10.0.4.0/24
+      AvailabilityZone: ap-southeast-1b
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-private-b'
+
+  # ── NAT Gateway (lets Fargate tasks in private subnets reach ECR) ────────────
+  ElasticIP:
+    Type: AWS::EC2::EIP
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      Domain: vpc
+
+  NatGateway:
+    Type: AWS::EC2::NatGateway
+    Properties:
+      AllocationId: !GetAtt ElasticIP.AllocationId
+      SubnetId: !Ref PublicSubnetA
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-nat'
+
+  # ── Route Tables ─────────────────────────────────────────────────────────────
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-public-rt'
+
+  PublicRoute:
+    Type: AWS::EC2::Route
+    DependsOn: VPCGatewayAttachment
+    Properties:
+      RouteTableId: !Ref PublicRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      GatewayId: !Ref InternetGateway
+
+  PublicSubnetARouteTableAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetA
+      RouteTableId: !Ref PublicRouteTable
+
+  PublicSubnetBRouteTableAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PublicSubnetB
+      RouteTableId: !Ref PublicRouteTable
+
+  PrivateRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref VPC
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-private-rt'
+
+  PrivateRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref PrivateRouteTable
+      DestinationCidrBlock: 0.0.0.0/0
+      NatGatewayId: !Ref NatGateway
+
+  PrivateSubnetARouteTableAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetA
+      RouteTableId: !Ref PrivateRouteTable
+
+  PrivateSubnetBRouteTableAssoc:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      SubnetId: !Ref PrivateSubnetB
+      RouteTableId: !Ref PrivateRouteTable
+
+  # ── Security Groups ──────────────────────────────────────────────────────────
+  ALBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow HTTP/HTTPS from anywhere to ALB
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: 0.0.0.0/0
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-alb-sg'
+
+  ECSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow traffic from ALB to ECS tasks on port 3000
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 3000
+          ToPort: 3000
+          SourceSecurityGroupId: !Ref ALBSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-ecs-sg'
+
+  RDSSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow Postgres from ECS tasks only
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 5432
+          ToPort: 5432
+          SourceSecurityGroupId: !Ref ECSSecurityGroup
+      Tags:
+        - Key: Name
+          Value: !Sub '${EnvironmentName}-rds-sg'
+
+  # ── RDS PostgreSQL ───────────────────────────────────────────────────────────
+  DBSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: Private subnets for RDS
+      SubnetIds:
+        - !Ref PrivateSubnetA
+        - !Ref PrivateSubnetB
+
+  RDSInstance:
+    Type: AWS::RDS::DBInstance
+    DeletionPolicy: Snapshot
+    Properties:
+      DBInstanceIdentifier: !Sub '${EnvironmentName}-db'
+      DBInstanceClass: !Ref DBInstanceClass
+      Engine: postgres
+      EngineVersion: '14'
+      MasterUsername: postgres
+      MasterUserPassword: !Ref DBPassword
+      DBName: todo_db
+      AllocatedStorage: '20'
+      StorageType: gp2
+      MultiAZ: false
+      PubliclyAccessible: false
+      DBSubnetGroupName: !Ref DBSubnetGroup
+      VPCSecurityGroups:
+        - !Ref RDSSecurityGroup
+      DeletionProtection: false
+      BackupRetentionPeriod: 7
+
+  # ── Application Load Balancer ────────────────────────────────────────────────
+  ALB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Name: !Sub '${EnvironmentName}-alb'
+      Scheme: internet-facing
+      Type: application
+      Subnets:
+        - !Ref PublicSubnetA
+        - !Ref PublicSubnetB
+      SecurityGroups:
+        - !Ref ALBSecurityGroup
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      Name: !Sub '${EnvironmentName}-tg'
+      Port: 3000
+      Protocol: HTTP
+      TargetType: ip
+      VpcId: !Ref VPC
+      HealthCheckPath: /api
+      HealthCheckIntervalSeconds: 30
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 2
+      UnhealthyThresholdCount: 5
+
+  ALBListener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      LoadBalancerArn: !Ref ALB
+      Port: 80
+      Protocol: HTTP
+      DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref TargetGroup
+
+  # ── IAM Roles ────────────────────────────────────────────────────────────────
+  ECSTaskExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${EnvironmentName}-task-exec-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy
+      Policies:
+        - PolicyName: SecretsManagerReadSecrets
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - secretsmanager:GetSecretValue
+                Resource:
+                  - !Ref DBPasswordSecret
+                  - !Ref JwtSecretResource
+
+  ECSTaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub '${EnvironmentName}-task-role'
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: sts:AssumeRole
+
+  # ── CloudWatch Logs ──────────────────────────────────────────────────────────
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/ecs/${EnvironmentName}'
+      RetentionInDays: 14
+
+  # ── ECS Cluster + Task Definition + Service ───────────────────────────────────
+  ECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Sub '${EnvironmentName}-cluster'
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Sub '${EnvironmentName}-task'
+      Cpu: !Ref TaskCpu
+      Memory: !Ref TaskMemory
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn: !GetAtt ECSTaskExecutionRole.Arn
+      TaskRoleArn: !GetAtt ECSTaskRole.Arn
+      ContainerDefinitions:
+        - Name: todo-app
+          # Image references the ECR repo created above using the provided tag
+          Image: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepository}:${ImageTag}'
+          PortMappings:
+            - ContainerPort: 3000
+              Protocol: tcp
+          # Plain env vars (non-secret)
+          Environment:
+            - Name: NODE_ENV
+              Value: production
+            - Name: PORT
+              Value: '3000'
+            - Name: DB_HOST
+              Value: !GetAtt RDSInstance.Endpoint.Address
+            - Name: DB_PORT
+              Value: '5432'
+            - Name: DB_USER
+              Value: postgres
+            - Name: DB_NAME
+              Value: todo_db
+            - Name: DB_SSL
+              Value: 'true'
+          # Secrets pulled from Secrets Manager at container startup
+          Secrets:
+            - Name: DB_PASSWORD
+              ValueFrom: !Ref DBPasswordSecret
+            - Name: JWT_SECRET
+              ValueFrom: !Ref JwtSecretResource
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref LogGroup
+              awslogs-region: !Ref 'AWS::Region'
+              awslogs-stream-prefix: ecs
+          Essential: true
+          # Startup probe – container is healthy if port 3000 responds
+          HealthCheck:
+            Command:
+              - CMD-SHELL
+              - 'wget -qO- http://localhost:3000/api || exit 1'
+            Interval: 30
+            Timeout: 10
+            Retries: 3
+            StartPeriod: 60
+
+  ECSService:
+    Type: AWS::ECS::Service
+    DependsOn: ALBListener
+    Properties:
+      ServiceName: !Sub '${EnvironmentName}-service'
+      Cluster: !Ref ECSCluster
+      TaskDefinition: !Ref TaskDefinition
+      DesiredCount: !Ref AppDesiredCount
+      LaunchType: FARGATE
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: DISABLED
+          SecurityGroups:
+            - !Ref ECSSecurityGroup
+          Subnets:
+            - !Ref PrivateSubnetA
+            - !Ref PrivateSubnetB
+      LoadBalancers:
+        - ContainerName: todo-app
+          ContainerPort: 3000
+          TargetGroupArn: !Ref TargetGroup
+      # Give the container time to run migrations before health checks start
+      HealthCheckGracePeriodSeconds: 120
+      DeploymentConfiguration:
+        MinimumHealthyPercent: 50
+        MaximumPercent: 200
+
+# ──────────────────────────────────────────────────────────────────────────────
+# Outputs
+# ──────────────────────────────────────────────────────────────────────────────
+Outputs:
+  ALBURL:
+    Description: Public URL of the Application Load Balancer
+    Value: !Sub 'http://${ALB.DNSName}'
+    Export:
+      Name: !Sub '${EnvironmentName}-alb-url'
+
+  SwaggerURL:
+    Description: Swagger API documentation URL
+    Value: !Sub 'http://${ALB.DNSName}/api'
+
+  ECRRepositoryURI:
+    Description: ECR repository URI (use this to tag and push Docker images)
+    Value: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepository}'
+    Export:
+      Name: !Sub '${EnvironmentName}-ecr-uri'
+
+  RDSEndpoint:
+    Description: RDS PostgreSQL endpoint address
+    Value: !GetAtt RDSInstance.Endpoint.Address
+    Export:
+      Name: !Sub '${EnvironmentName}-rds-endpoint'
+
+  ECSClusterName:
+    Description: ECS cluster name
+    Value: !Ref ECSCluster
+
+  ECSServiceName:
+    Description: ECS service name
+    Value: !GetAtt ECSService.Name
+
+  LogGroupName:
+    Description: CloudWatch Log Group for ECS tasks
+    Value: !Ref LogGroup

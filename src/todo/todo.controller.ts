@@ -89,6 +89,11 @@ export class TodoController {
     return this.todoService.getActivityLog(req.user.userId);
   }
 
+  @Get('trash')
+  async getTrash(@CurrentUser() user) {
+    return this.todoService.getTrash(user.userId);
+  }
+
   @Get(':id')
   @UseGuards(TodoOwnerGuard)
   getTodoById(@Request() req): any {
@@ -120,8 +125,16 @@ export class TodoController {
 
   @Delete(':id')
   @UseGuards(TodoOwnerGuard)
-  async deleteTodo(@Param('id') id: number, @Request() req) {
-    return this.todoService.deleteTodo(Number(id), req.user.userId);
+  async deleteTodo(
+    @Param('id') id: number,
+    @Request() req,
+    @Query('permanent') permanent?: string,
+  ) {
+    if (permanent === 'true') {
+      return this.todoService.permanentDeleteTodo(Number(id), req.user.userId);
+    }
+
+    return this.todoService.softDeleteTodo(Number(id), req.user.userId);
   }
 
   @Delete(':id/soft')

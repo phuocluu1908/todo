@@ -1,8 +1,13 @@
 import { Body, Controller, Post } from '@nestjs/common';
 import { EventsService } from './events.service';
+import { Allow, IsNotEmpty, IsString } from 'class-validator';
 
 class PublishDto {
+  @IsString()
+  @IsNotEmpty()
   event: string;
+
+  @Allow()
   payload: any;
 }
 
