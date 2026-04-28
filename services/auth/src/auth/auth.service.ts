@@ -106,7 +106,7 @@ export class AuthService {
         email,
         password,
         avatar,
-      });
+      }, { timeout: 8000 });
 
       const payload = response.data?.data ?? response.data;
       if (payload?.id && Number.isFinite(Number(payload.id))) {
@@ -132,7 +132,9 @@ export class AuthService {
         }
       }
 
-      throw new BadRequestException('Failed to sync user into app service');
+      // App service unreachable or timed out — log and continue without syncing
+      console.error('App service sync failed (non-fatal):', (error as any)?.message);
+      return undefined;
     }
   }
 
