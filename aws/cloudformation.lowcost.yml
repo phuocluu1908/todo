@@ -54,6 +54,13 @@ Resources:
       ImageScanningConfiguration:
         ScanOnPush: true
 
+  ECRRepositoryFE:
+    Type: AWS::ECR::Repository
+    Properties:
+      RepositoryName: !Sub '${EnvironmentName}-fe'
+      ImageScanningConfiguration:
+        ScanOnPush: true
+
   VPC:
     Type: AWS::EC2::VPC
     Properties:
@@ -120,6 +127,10 @@ Resources:
         - IpProtocol: tcp
           FromPort: 3001
           ToPort: 3001
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: tcp
+          FromPort: 8080
+          ToPort: 8080
           CidrIp: 0.0.0.0/0
         - IpProtocol: tcp
           FromPort: 22
@@ -248,6 +259,14 @@ Outputs:
     Description: ECR repository URI for auth service
     Value: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepositoryAuth}'
 
+  ECRRepositoryFEURI:
+    Description: ECR repository URI for frontend
+    Value: !Sub '${AWS::AccountId}.dkr.ecr.${AWS::Region}.amazonaws.com/${ECRRepositoryFE}'
+
   AuthServiceURL:
     Description: Auth service URL
     Value: !Sub 'http://${AppInstance.PublicDnsName}:3001'
+
+  FrontendURL:
+    Description: Frontend URL
+    Value: !Sub 'http://${AppInstance.PublicDnsName}:8080'

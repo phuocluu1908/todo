@@ -1,4 +1,4 @@
-name: CI
+name: CI/CD
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
     env:
       DOCKER_REGISTRY: docker.io
@@ -30,21 +30,129 @@ jobs:
       - name: Build
         run: yarn build
 
-      - name: Login to Docker Hub (for push)
-        if: github.ref == 'refs/heads/main' && env.DOCKER_USERNAME != '' && env.DOCKER_PASSWORD != ''
-        uses: docker/login-action@v2
-        with:
-          registry: ${{ env.DOCKER_REGISTRY }}
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_PASSWORD }}
+  deploy:
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ap-southeast-1
+      AWS_ACCOUNT_ID: 861638088375
+      STACK_NAME: todo-app-lowcost
+      IMAGE_TAG: latest
+      EC2_INSTANCE_ID: i-07261ffb50922572e
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Build and push Docker image (optional)
-        if: github.ref == 'refs/heads/main' && env.DOCKER_USERNAME != '' && env.DOCKER_PASSWORD != ''
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+        id: login-ecr
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push main app image to ECR
         uses: docker/build-push-action@v4
         with:
+          context: .
           push: true
-          tags: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_USERNAME }}/todo-app:latest
-          build-args: |
-            NODE_ENV=production
-        env:
-          DOCKER_BUILDKIT: 1
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.STACK_NAME }}:${{ env.IMAGE_TAG }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.STACK_NAME }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      - name: Build and push auth service image to ECR
+        uses: docker/build-push-action@v4
+        with:
+          context: ./services/auth
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.STACK_NAME }}-auth:${{ env.IMAGE_TAG }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.STACK_NAME }}-auth:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      - name: Deploy to EC2 via SSM
+        run: |
+          set -e
+          
+          ECR_REGISTRY="${{ steps.login-ecr.outputs.registry }}"
+          IMAGE_URI="$ECR_REGISTRY/$STACK_NAME:$IMAGE_TAG"
+          AUTH_IMAGE_URI="$ECR_REGISTRY/$STACK_NAME-auth:$IMAGE_TAG"
+          
+          # Create JSON file with SSM command
+          cat > /tmp/ssm-deploy.json <<'EOFCMD'
+          {
+            "commands": [
+              "set -e",
+              "set -a && . /opt/todo/.env && set +a",
+              "IMAGE_URI='ECR_REGISTRY/STACK_NAME:IMAGE_TAG'",
+              "AUTH_IMAGE_URI='ECR_REGISTRY/STACK_NAME-auth:IMAGE_TAG'",
+              "aws ecr get-login-password --region AWS_REGION | docker login --username AWS --password-stdin ECR_REGISTRY",
+              "docker pull \"$IMAGE_URI\"",
+              "docker pull \"$AUTH_IMAGE_URI\"",
+              "docker rm -f todo-auth || true",
+              "docker run -d --name todo-auth --restart unless-stopped --network todo-net -p 3001:3001 -e PORT=3001 -e JWT_SECRET=\"$JWT_SECRET\" -e DB_HOST=todo-db -e DB_PORT=5432 -e DB_USER=postgres -e DB_PASSWORD=\"$DB_PASSWORD\" -e DB_NAME=todo_db -e DB_SSL=false \"$AUTH_IMAGE_URI\"",
+              "docker rm -f todo-app || true",
+              "docker run -d --name todo-app --restart unless-stopped --network todo-net -p 80:3000 -e NODE_ENV=production -e PORT=3000 -e DB_TYPE=postgres -e DB_HOST=todo-db -e DB_PORT=5432 -e DB_USER=postgres -e DB_PASSWORD=\"$DB_PASSWORD\" -e DB_NAME=todo_db -e DB_SSL=false -e JWT_SECRET=\"$JWT_SECRET\" -v /opt/todo/data:/app/data \"$IMAGE_URI\"",
+              "echo 'Backend services restarted successfully'"
+            ]
+          }
+          EOFCMD
+          
+          # Replace placeholders in the JSON file
+          sed -i.bak "s|ECR_REGISTRY|$ECR_REGISTRY|g" /tmp/ssm-deploy.json
+          sed -i.bak "s|STACK_NAME|$STACK_NAME|g" /tmp/ssm-deploy.json
+          sed -i.bak "s|IMAGE_TAG|$IMAGE_TAG|g" /tmp/ssm-deploy.json
+          sed -i.bak "s|AWS_REGION|$AWS_REGION|g" /tmp/ssm-deploy.json
+          
+          # Send command via SSM
+          COMMAND_ID=$(aws ssm send-command \
+            --region "$AWS_REGION" \
+            --instance-ids "$EC2_INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --parameters file:///tmp/ssm-deploy.json \
+            --query "Command.CommandId" \
+            --output text)
+          
+          echo "SSM Command ID: $COMMAND_ID"
+          
+          # Wait for command to complete (up to 5 minutes)
+          for i in {1..150}; do
+            STATUS=$(aws ssm list-command-invocations \
+              --command-id "$COMMAND_ID" \
+              --region "$AWS_REGION" \
+              --query "CommandInvocations[0].CommandPlugins[0].Status" \
+              --output text 2>/dev/null || echo "NotReady")
+            
+            if [ "$STATUS" = "Success" ]; then
+              echo "✅ Backend deployment successful!"
+              exit 0
+            elif [ "$STATUS" = "Failed" ]; then
+              echo "❌ Backend deployment failed!"
+              aws ssm list-command-invocations --command-id "$COMMAND_ID" --details --region "$AWS_REGION"
+              exit 1
+            fi
+            
+            sleep 2
+          done
+          
+          echo "❌ Deployment command timed out after 5 minutes"
+          exit 1
+
+      - name: Deployment notification
+        if: success()
+        run: echo "✅ Successfully deployed to production (EC2: ${{ env.EC2_INSTANCE_ID }})"
+
+      - name: Deployment failure notification
+        if: failure()
+        run: echo "❌ Deployment failed - check logs above for details"
