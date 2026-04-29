@@ -44,13 +44,13 @@ for i in $(seq 1 150); do
   STATUS=$(aws ssm list-command-invocations \
     --command-id "${COMMAND_ID}" \
     --region "${AWS_REGION}" \
-    --query "CommandInvocations[0].CommandPlugins[0].Status" \
+    --query "CommandInvocations[0].Status" \
     --output text 2>/dev/null || echo "NotReady")
 
   if [ "${STATUS}" = "Success" ]; then
     echo "Backend deployment successful!"
     exit 0
-  elif [ "${STATUS}" = "Failed" ]; then
+  elif [ "${STATUS}" = "Failed" ] || [ "${STATUS}" = "Cancelled" ] || [ "${STATUS}" = "TimedOut" ] || [ "${STATUS}" = "Cancelling" ]; then
     echo "Backend deployment failed!"
     aws ssm list-command-invocations --command-id "${COMMAND_ID}" --details --region "${AWS_REGION}"
     exit 1
