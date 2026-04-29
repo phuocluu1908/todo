@@ -39,6 +39,17 @@ Parameters:
     Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
     Description: Amazon Linux 2023 AMI via SSM public parameter.
 
+  EnableCloudFront:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: Set to true to create CloudFront distribution (requires account verification).
+
+Conditions:
+  UseCloudFront: !Equals [!Ref EnableCloudFront, 'true']
+
 Resources:
   ECRRepository:
     Type: AWS::ECR::Repository
@@ -60,6 +71,90 @@ Resources:
       RepositoryName: !Sub '${EnvironmentName}-fe'
       ImageScanningConfiguration:
         ScanOnPush: true
+
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+      OwnershipControls:
+        Rules:
+          - ObjectOwnership: BucketOwnerEnforced
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+
+  FrontendCloudFrontOAC:
+    Type: AWS::CloudFront::OriginAccessControl
+    Condition: UseCloudFront
+    Properties:
+      OriginAccessControlConfig:
+        Name: !Sub '${EnvironmentName}-frontend-oac'
+        Description: Access control for frontend S3 bucket
+        OriginAccessControlOriginType: s3
+        SigningBehavior: always
+        SigningProtocol: sigv4
+
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: '*'
+            Action: s3:GetObject
+            Resource: !Sub '${FrontendBucket.Arn}/*'
+
+  FrontendDistribution:
+    Type: AWS::CloudFront::Distribution
+    Condition: UseCloudFront
+    Properties:
+      DistributionConfig:
+        Enabled: true
+        HttpVersion: http2
+        IPV6Enabled: true
+        PriceClass: PriceClass_100
+        DefaultRootObject: index.html
+        Origins:
+          - Id: FrontendS3Origin
+            DomainName: !GetAtt FrontendBucket.RegionalDomainName
+            S3OriginConfig: {}
+            OriginAccessControlId: !GetAtt FrontendCloudFrontOAC.Id
+        DefaultCacheBehavior:
+          TargetOriginId: FrontendS3Origin
+          ViewerProtocolPolicy: redirect-to-https
+          Compress: true
+          AllowedMethods:
+            - GET
+            - HEAD
+          CachedMethods:
+            - GET
+            - HEAD
+          ForwardedValues:
+            QueryString: false
+            Cookies:
+              Forward: none
+        CustomErrorResponses:
+          - ErrorCode: 403
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 60
+          - ErrorCode: 404
+            ResponseCode: 200
+            ResponsePagePath: /index.html
+            ErrorCachingMinTTL: 60
+        ViewerCertificate:
+          CloudFrontDefaultCertificate: true
 
   VPC:
     Type: AWS::EC2::VPC
@@ -270,3 +365,21 @@ Outputs:
   FrontendURL:
     Description: Frontend URL
     Value: !Sub 'http://${AppInstance.PublicDnsName}:8080'
+
+  FrontendS3BucketName:
+    Description: S3 bucket for frontend static files
+    Value: !Ref FrontendBucket
+
+  FrontendS3WebsiteURL:
+    Description: Public S3 website URL for frontend
+    Value: !GetAtt FrontendBucket.WebsiteURL
+
+  FrontendCloudFrontDistributionId:
+    Condition: UseCloudFront
+    Description: CloudFront distribution ID for frontend invalidation
+    Value: !Ref FrontendDistribution
+
+  FrontendCloudFrontURL:
+    Condition: UseCloudFront
+    Description: CloudFront URL for frontend
+    Value: !Sub 'https://${FrontendDistribution.DomainName}'
