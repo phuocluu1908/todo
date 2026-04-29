@@ -1,4 +1,4 @@
-name: CI
+name: CI/CD
 
 on:
   push:
@@ -7,7 +7,7 @@ on:
     branches: [ main ]
 
 jobs:
-  build:
+  build-and-test:
     runs-on: ubuntu-latest
     env:
       DOCKER_REGISTRY: docker.io
@@ -30,21 +30,68 @@ jobs:
       - name: Build
         run: yarn build
 
-      - name: Login to Docker Hub (for push)
-        if: github.ref == 'refs/heads/main' && env.DOCKER_USERNAME != '' && env.DOCKER_PASSWORD != ''
-        uses: docker/login-action@v2
-        with:
-          registry: ${{ env.DOCKER_REGISTRY }}
-          username: ${{ env.DOCKER_USERNAME }}
-          password: ${{ env.DOCKER_PASSWORD }}
+  deploy:
+    needs: build-and-test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    runs-on: ubuntu-latest
+    env:
+      AWS_REGION: ap-southeast-1
+      AWS_ACCOUNT_ID: 861638088375
+      STACK_NAME: todo-app-lowcost
+      IMAGE_TAG: latest
+      EC2_INSTANCE_ID: i-07261ffb50922572e
+    steps:
+      - uses: actions/checkout@v4
 
-      - name: Build and push Docker image (optional)
-        if: github.ref == 'refs/heads/main' && env.DOCKER_USERNAME != '' && env.DOCKER_PASSWORD != ''
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Login to Amazon ECR
+        uses: aws-actions/amazon-ecr-login@v2
+        id: login-ecr
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push main app image to ECR
         uses: docker/build-push-action@v4
         with:
+          context: .
           push: true
-          tags: ${{ env.DOCKER_REGISTRY }}/${{ env.DOCKER_USERNAME }}/todo-app:latest
-          build-args: |
-            NODE_ENV=production
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.STACK_NAME }}:${{ env.IMAGE_TAG }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.STACK_NAME }}:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      - name: Build and push auth service image to ECR
+        uses: docker/build-push-action@v4
+        with:
+          context: ./services/auth
+          push: true
+          tags: |
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.STACK_NAME }}-auth:${{ env.IMAGE_TAG }}
+            ${{ steps.login-ecr.outputs.registry }}/${{ env.STACK_NAME }}-auth:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+          platforms: linux/amd64
+
+      - name: Deploy to EC2 via SSM
         env:
-          DOCKER_BUILDKIT: 1
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          chmod +x aws/ssm-deploy.sh
+          bash aws/ssm-deploy.sh
+
+      - name: Deployment notification
+        if: success()
+        run: echo "Deployed successfully to production"
+
+      - name: Deployment failure notification
+        if: failure()
+        run: echo "Deployment failed - check logs above for details"
